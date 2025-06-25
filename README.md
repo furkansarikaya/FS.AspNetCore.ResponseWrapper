@@ -2,7 +2,8 @@
 
 [![NuGet Version](https://img.shields.io/nuget/v/FS.AspNetCore.ResponseWrapper.svg)](https://www.nuget.org/packages/FS.AspNetCore.ResponseWrapper)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/FS.AspNetCore.ResponseWrapper.svg)](https://www.nuget.org/packages/FS.AspNetCore.ResponseWrapper)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub License](https://img.shields.io/github/license/furkansarikaya/FS.AspNetCore.ResponseWrapper)](https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper/blob/main/LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/furkansarikaya/FS.AspNetCore.ResponseWrapper.svg)](https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper/stargazers)
 
 **Automatic API response wrapping with metadata injection for ASP.NET Core applications.**
 
