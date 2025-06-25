@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using FS.AspNetCore.ResponseWrapper.Helpers;
 using FS.AspNetCore.ResponseWrapper.Models;
 using FS.AspNetCore.ResponseWrapper.Models.Paging;
 using Microsoft.AspNetCore.Http;
@@ -277,25 +278,124 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
     }
 
     /// <summary>
-    /// Extracts pagination metadata from data objects that implement IPagedResult interface.
-    /// This method enables automatic pagination information extraction for paged responses.
+    /// Extracts pagination metadata from data objects using flexible duck typing detection.
+    /// This method now works with ANY object that has the required pagination properties,
+    /// regardless of which interface it implements or what namespace it comes from.
     /// </summary>
     /// <param name="data">The response data to analyze for pagination information</param>
-    /// <returns>Pagination metadata if the data is paged; otherwise, null</returns>
+    /// <returns>Pagination metadata if the data has pagination properties; otherwise, null</returns>
+    /// <remarks>
+    /// This updated implementation solves the interface conflict problem by using duck typing principles.
+    /// Instead of checking for a specific interface implementation, it analyzes the object's structure
+    /// to determine if it contains pagination properties. This approach provides several benefits:
+    /// 
+    /// 1. **Namespace Independence**: Works with user's custom pagination interfaces regardless of namespace
+    /// 2. **Library Agnostic**: Compatible with any pagination library or custom implementation  
+    /// 3. **Flexible Matching**: Recognizes pagination patterns without requiring specific inheritance
+    /// 4. **Backward Compatible**: Still works with the original IPagedResult interface
+    /// 
+    /// The detection process uses cached reflection for optimal performance and handles edge cases gracefully.
+    /// </remarks>
+    /// <example>
+    /// This method now works with all of these different pagination implementations:
+    /// <code>
+    /// // Original ResponseWrapper interface
+    /// FS.AspNetCore.ResponseWrapper.Models.Paging.PagedResult&lt;Product&gt;
+    /// 
+    /// // User's custom interface
+    /// MyProject.Models.PagedResponse&lt;Product&gt;
+    /// 
+    /// // Third-party library interface  
+    /// SomeLibrary.Pagination.PaginatedResult&lt;Product&gt;
+    /// 
+    /// // Any class with the right properties
+    /// public class CustomPagedData&lt;T&gt; 
+    /// {
+    ///     public List&lt;T&gt; Items { get; set; }
+    ///     public int Page { get; set; }
+    ///     public int PageSize { get; set; }
+    ///     public int TotalPages { get; set; }
+    ///     public int TotalItems { get; set; }
+    ///     public bool HasNextPage { get; set; }
+    ///     public bool HasPreviousPage { get; set; }
+    /// }
+    /// </code>
+    /// </example>
     private static PaginationMetadata? ExtractPaginationMetadata(object data)
     {
-        if (data is not IPagedResult pagedResult)
-            return null;
+        // Use the flexible duck typing approach instead of interface checking
+        return PaginationDetectionHelper.ExtractPaginationMetadata(data);
+    }
 
-        return new PaginationMetadata
+    /// <summary>
+    /// Transforms paged results into clean data structures using flexible detection,
+    /// working with any pagination implementation regardless of interface or namespace.
+    /// </summary>
+    /// <param name="originalData">The original paged data from any pagination implementation</param>
+    /// <param name="dataType">The type of the original data</param>
+    /// <returns>Tuple containing transformed data and its type</returns>
+    /// <remarks>
+    /// This updated method provides robust pagination handling that adapts to various pagination patterns:
+    /// 
+    /// **Detection Strategy**: Uses duck typing to identify pagination properties rather than interface matching.
+    /// This means it works with any object structure that contains the expected pagination properties.
+    /// 
+    /// **Extraction Process**: 
+    /// 1. Analyzes the object structure using cached reflection for performance
+    /// 2. Extracts the "Items" collection containing the actual business data
+    /// 3. Determines the correct item type for response construction
+    /// 4. Creates a clean result structure without pagination metadata
+    /// 
+    /// **Error Handling**: The method includes comprehensive error handling and logging to ensure
+    /// that pagination detection failures don't break the entire response wrapping process.
+    /// 
+    /// **Performance Optimization**: Uses type caching to minimize reflection overhead on repeated calls
+    /// with the same types, which is common in API scenarios.
+    /// </remarks>
+    private (object transformedData, Type transformedDataType) TransformPagedResult(object originalData, Type dataType)
+    {
+        // First, check if this object has pagination properties using duck typing
+        if (!PaginationDetectionHelper.HasPaginationProperties(originalData))
         {
-            Page = pagedResult.Page,
-            PageSize = pagedResult.PageSize,
-            TotalPages = pagedResult.TotalPages,
-            TotalItems = pagedResult.TotalItems,
-            HasNextPage = pagedResult.HasNextPage,
-            HasPreviousPage = pagedResult.HasPreviousPage
-        };
+            return (originalData, dataType);
+        }
+
+        try
+        {
+            // Extract the items collection from the paginated object
+            var (items, itemType) = PaginationDetectionHelper.ExtractItems(originalData);
+
+            if (items == null)
+            {
+                _logger.LogWarning("Items collection is null for paginated type {DataType}", dataType.Name);
+                return (originalData, dataType);
+            }
+
+            // Create CleanPagedResult<T> containing only business data
+            var cleanResultType = typeof(CleanPagedResult<>).MakeGenericType(itemType);
+            var cleanResult = Activator.CreateInstance(cleanResultType);
+
+            if (cleanResult == null)
+            {
+                _logger.LogError("Failed to create clean result type for {ItemType}", itemType.Name);
+                return (originalData, dataType);
+            }
+
+            // Set only Items property, excluding pagination metadata
+            var cleanItemsProperty = cleanResultType.GetProperty("Items");
+            cleanItemsProperty?.SetValue(cleanResult, items);
+
+            _logger.LogDebug("Successfully transformed paginated result with {ItemType} to CleanPagedResult<{ItemType}>",
+                itemType.Name, itemType.Name);
+
+            return (cleanResult, cleanResultType);
+        }
+        catch (Exception ex)
+        {
+            // If transformation fails, log the issue but don't break the response
+            _logger.LogWarning(ex, "Failed to transform paginated result of type {DataType}. Using original data.", dataType.Name);
+            return (originalData, dataType);
+        }
     }
 
     /// <summary>
@@ -360,61 +460,6 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
         }
 
         return additional.Count > 0 ? additional : null;
-    }
-
-    /// <summary>
-    /// Transforms paged results into clean data structures while preserving pagination information in metadata.
-    /// This method separates business data from pagination metadata for cleaner API responses.
-    /// </summary>
-    /// <param name="originalData">The original paged data</param>
-    /// <param name="dataType">The type of the original data</param>
-    /// <returns>Tuple containing transformed data and its type</returns>
-    private (object transformedData, Type transformedDataType) TransformPagedResult(object originalData, Type dataType)
-    {
-        if (originalData is not IPagedResult)
-            return (originalData, dataType);
-
-        // Extract items from PagedResult<T>
-        var itemsProperty = dataType.GetProperty("Items");
-        if (itemsProperty == null)
-        {
-            _logger.LogWarning("Items property not found on type {DataType}", dataType.Name);
-            return (originalData, dataType);
-        }
-
-        var items = itemsProperty.GetValue(originalData);
-        if (items == null)
-        {
-            _logger.LogWarning("Items collection is null for type {DataType}", dataType.Name);
-            return (originalData, dataType);
-        }
-
-        // Determine item type from PagedResult<T>
-        var itemType = GetItemTypeFromPagedResult(dataType);
-        if (itemType == null)
-        {
-            _logger.LogWarning("Could not determine item type from {DataType}", dataType.Name);
-            return (originalData, dataType);
-        }
-
-        // Create CleanPagedResult<T> containing only business data
-        var cleanResultType = typeof(CleanPagedResult<>).MakeGenericType(itemType);
-        var cleanResult = Activator.CreateInstance(cleanResultType);
-
-        if (cleanResult == null)
-        {
-            _logger.LogError("Failed to create clean result type for {ItemType}", itemType.Name);
-            return (originalData, dataType);
-        }
-
-        // Set only Items property, excluding pagination metadata
-        var cleanItemsProperty = cleanResultType.GetProperty("Items");
-        cleanItemsProperty?.SetValue(cleanResult, items);
-
-        _logger.LogDebug("Successfully transformed PagedResult<{ItemType}> to CleanPagedResult<{ItemType}>",
-            itemType.Name, itemType.Name);
-
-        return (cleanResult, cleanResultType);
     }
 
     /// <summary>
