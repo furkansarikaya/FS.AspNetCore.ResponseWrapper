@@ -27,7 +27,7 @@ public static class PaginationDetectionHelper
     /// Cache for storing reflection results to improve performance on repeated calls.
     /// This prevents the overhead of reflection analysis for the same types across requests.
     /// </summary>
-    private static readonly ConcurrentDictionary<Type, PaginationTypeInfo> TypeCache = new();
+    private static readonly ConcurrentDictionary<Type, PaginationTypeInfo> _typeCache = new();
 
     /// <summary>
     /// Required property names for pagination detection. These represent the minimal set
@@ -55,17 +55,6 @@ public static class PaginationDetectionHelper
     /// contains the required properties with correct types, regardless of inheritance
     /// hierarchy, interface implementation, or namespace origin.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// // This would return true for any of these object types:
-    /// // - FS.AspNetCore.ResponseWrapper.Models.Paging.PagedResult&lt;T&gt;
-    /// // - MyProject.Models.PagedResponse&lt;T&gt;  
-    /// // - ThirdParty.Library.PaginatedResult&lt;T&gt;
-    /// // As long as they have the required properties
-    /// 
-    /// var isPagedResult = PaginationDetectionHelper.HasPaginationProperties(myData);
-    /// </code>
-    /// </example>
     public static bool HasPaginationProperties(object data)
     {
         if (data == null) return false;
@@ -94,16 +83,6 @@ public static class PaginationDetectionHelper
     /// This ensures that the pagination detection doesn't break the application even
     /// when encountering unexpected object structures.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// var paginationInfo = PaginationDetectionHelper.ExtractPaginationMetadata(pagedData);
-    /// if (paginationInfo != null)
-    /// {
-    ///     // Successfully extracted pagination information
-    ///     Console.WriteLine($"Page {paginationInfo.Page} of {paginationInfo.TotalPages}");
-    /// }
-    /// </code>
-    /// </example>
     public static PaginationMetadata? ExtractPaginationMetadata(object data)
     {
         if (data == null) return null;
@@ -159,13 +138,6 @@ public static class PaginationDetectionHelper
     /// pattern of having an "Items" property containing the actual business data. This pattern
     /// is used by most pagination libraries and custom implementations.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// var (cleanItems, itemType) = PaginationDetectionHelper.ExtractItems(pagedResult);
-    /// // cleanItems now contains just the business data without pagination metadata
-    /// // itemType contains the type information for proper response construction
-    /// </code>
-    /// </example>
     public static (object items, Type itemType) ExtractItems(object data)
     {
         if (data == null) return (data, data?.GetType() ?? typeof(object));
@@ -195,7 +167,7 @@ public static class PaginationDetectionHelper
     /// <returns>Cached type information with pagination compatibility details</returns>
     private static PaginationTypeInfo GetOrCreateTypeInfo(Type type)
     {
-        return TypeCache.GetOrAdd(type, AnalyzeTypeForPagination);
+        return _typeCache.GetOrAdd(type, AnalyzeTypeForPagination);
     }
 
     /// <summary>
@@ -287,13 +259,44 @@ public static class PaginationDetectionHelper
     /// </summary>
     private class PaginationTypeInfo
     {
+        /// <summary>
+        /// Gets or sets the type being analyzed for pagination compatibility.
+        /// </summary>
         public Type Type { get; set; } = typeof(object);
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the type is compatible with pagination processing.
+        /// </summary>
         public bool IsPaginationCompatible { get; set; }
+
+        /// <summary>
+        /// Gets or sets the PropertyInfo for the Page property if it exists and is compatible.
+        /// </summary>
         public PropertyInfo? PageProperty { get; set; }
+
+        /// <summary>
+        /// Gets or sets the PropertyInfo for the PageSize property if it exists and is compatible.
+        /// </summary>
         public PropertyInfo? PageSizeProperty { get; set; }
+
+        /// <summary>
+        /// Gets or sets the PropertyInfo for the TotalPages property if it exists and is compatible.
+        /// </summary>
         public PropertyInfo? TotalPagesProperty { get; set; }
+
+        /// <summary>
+        /// Gets or sets the PropertyInfo for the TotalItems property if it exists and is compatible.
+        /// </summary>
         public PropertyInfo? TotalItemsProperty { get; set; }
+
+        /// <summary>
+        /// Gets or sets the PropertyInfo for the HasNextPage property if it exists and is compatible.
+        /// </summary>
         public PropertyInfo? HasNextPageProperty { get; set; }
+
+        /// <summary>
+        /// Gets or sets the PropertyInfo for the HasPreviousPage property if it exists and is compatible.
+        /// </summary>
         public PropertyInfo? HasPreviousPageProperty { get; set; }
     }
 }
