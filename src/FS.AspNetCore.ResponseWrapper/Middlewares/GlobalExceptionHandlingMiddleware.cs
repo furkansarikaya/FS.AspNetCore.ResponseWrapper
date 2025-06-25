@@ -22,12 +22,17 @@ namespace FS.AspNetCore.ResponseWrapper.Middlewares;
 /// This middleware works in conjunction with ApiResponseWrapperFilter to provide comprehensive
 /// request/response lifecycle management. While the filter handles successful responses,
 /// the middleware ensures errors are handled with the same level of consistency and metadata richness.
+/// 
+/// The middleware supports complete customization of error messages through the ErrorMessageConfiguration,
+/// allowing developers to provide domain-specific, localized, or brand-appropriate error messaging
+/// while maintaining the technical robustness of the error handling system.
 /// </remarks>
 public class GlobalExceptionHandlingMiddleware : IMiddleware
 {
     private readonly ILogger<GlobalExceptionHandlingMiddleware> _logger;
     private readonly Func<DateTime> _getCurrentTime;
     private readonly ResponseWrapperOptions _options;
+    private readonly ErrorMessageConfiguration _errorMessages;
 
     /// <summary>
     /// Initializes a new instance of the GlobalExceptionHandlingMiddleware with required dependencies.
@@ -35,24 +40,52 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     /// <param name="logger">Logger instance for error logging and diagnostic information</param>
     /// <param name="getCurrentTime">Function to provide current DateTime, ensuring consistency with filter timing</param>
     /// <param name="options">Configuration options that control middleware behavior and error response formatting</param>
+    /// <param name="errorMessages">Configuration for customizing user-facing error messages, enabling localization and branding</param>
+    /// <exception cref="ArgumentNullException">Thrown when any required parameter is null</exception>
+    /// <remarks>
+    /// The middleware requires all dependencies to be properly configured to ensure robust error handling.
+    /// The error message configuration allows complete control over user-facing messaging while maintaining
+    /// the technical aspects of error processing and metadata generation.
+    /// 
+    /// This constructor follows the Explicit Dependencies Principle, making all required dependencies
+    /// visible and ensuring that the middleware cannot be instantiated without proper configuration.
+    /// </remarks>
     public GlobalExceptionHandlingMiddleware(
         ILogger<GlobalExceptionHandlingMiddleware> logger,
         Func<DateTime> getCurrentTime,
-        ResponseWrapperOptions options)
+        ResponseWrapperOptions options,
+        ErrorMessageConfiguration errorMessages)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _getCurrentTime = getCurrentTime ?? throw new ArgumentNullException(nameof(getCurrentTime));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _errorMessages = errorMessages ?? throw new ArgumentNullException(nameof(errorMessages));
     }
 
     /// <summary>
     /// Processes HTTP requests and handles any unhandled exceptions that occur during request processing.
     /// This method implements the core exception handling logic and ensures all errors are properly logged
-    /// and converted to structured responses.
+    /// and converted to structured responses using configured error messages.
     /// </summary>
     /// <param name="context">The HTTP context for the current request</param>
     /// <param name="next">The next middleware delegate in the pipeline</param>
     /// <returns>A task representing the asynchronous middleware operation</returns>
+    /// <remarks>
+    /// The middleware implements a comprehensive exception handling strategy that:
+    /// 1. Categorizes exceptions by type for appropriate HTTP status code mapping
+    /// 2. Uses configured error messages for consistent user communication
+    /// 3. Logs exceptions at appropriate levels based on their expected nature
+    /// 4. Generates rich metadata for debugging and monitoring purposes
+    /// 5. Ensures no exception leaves the application in an unhandled state
+    /// 
+    /// The exception categorization follows industry best practices:
+    /// - Validation errors (400 Bad Request) for input validation failures
+    /// - Not found errors (404 Not Found) for missing resources
+    /// - Authorization errors (401/403) for authentication and permission issues
+    /// - Business logic errors (400 Bad Request) for domain rule violations
+    /// - Application errors (500) for unexpected application failures
+    /// - System errors (500) for completely unexpected failures
+    /// </remarks>
     public async Task InvokeAsync(HttpContext context, RequestDelegate next)
     {
         // Check if this request should be excluded from error wrapping
@@ -75,7 +108,7 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
             await HandleExceptionAsync(
                 context,
                 exception,
-                "Validation errors occurred",
+                _errorMessages.GetValidationErrorMessage(),
                 exception.Errors.Values.SelectMany(x => x).ToList(),
                 HttpStatusCode.BadRequest,
                 errorTrackingData,
@@ -86,7 +119,7 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
             await HandleExceptionAsync(
                 context,
                 exception,
-                "Resource not found",
+                _errorMessages.GetNotFoundErrorMessage(),
                 [exception.Message],
                 HttpStatusCode.NotFound,
                 errorTrackingData,
@@ -97,7 +130,7 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
             await HandleExceptionAsync(
                 context,
                 exception,
-                "Access forbidden",
+                _errorMessages.GetForbiddenAccessMessage(),
                 [exception.Message],
                 HttpStatusCode.Forbidden,
                 errorTrackingData,
@@ -108,7 +141,7 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
             await HandleExceptionAsync(
                 context,
                 exception,
-                "Authentication required",
+                _errorMessages.GetUnauthorizedAccessMessage(),
                 [exception.Message],
                 HttpStatusCode.Unauthorized,
                 errorTrackingData,
@@ -119,7 +152,7 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
             await HandleExceptionAsync(
                 context,
                 exception,
-                "Business rule violation",
+                _errorMessages.GetBusinessRuleViolationMessage(),
                 [exception.Message],
                 HttpStatusCode.BadRequest,
                 errorTrackingData,
@@ -130,7 +163,7 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
             await HandleExceptionAsync(
                 context,
                 exception,
-                "Application error occurred",
+                _errorMessages.GetApplicationErrorMessage(),
                 [exception.Message],
                 HttpStatusCode.InternalServerError,
                 errorTrackingData,
@@ -141,7 +174,7 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
             await HandleExceptionAsync(
                 context,
                 exception,
-                "An unexpected error occurred",
+                _errorMessages.GetUnexpectedErrorMessage(),
                 [GetSafeErrorMessage(exception)],
                 HttpStatusCode.InternalServerError,
                 errorTrackingData,
@@ -163,6 +196,15 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     /// </summary>
     /// <param name="context">The HTTP context containing request information</param>
     /// <returns>True if the request should be excluded from error wrapping; otherwise, false</returns>
+    /// <remarks>
+    /// The exclusion logic allows fine-grained control over which requests receive error wrapping.
+    /// This is particularly useful for endpoints that need to maintain specific error response formats
+    /// for integration purposes, such as health checks, metrics endpoints, or legacy API compatibility.
+    /// 
+    /// The path-based exclusion uses case-insensitive prefix matching for simplicity and performance.
+    /// More complex exclusion patterns can be implemented by extending this method or using the
+    /// ExcludedTypes configuration for type-based exclusions.
+    /// </remarks>
     private bool ShouldExcludeRequest(HttpContext context)
     {
         // Don't wrap errors if error wrapping is disabled
@@ -182,6 +224,16 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     /// </summary>
     /// <param name="context">The HTTP context to store tracking information</param>
     /// <returns>Error tracking data structure containing timing and identification information</returns>
+    /// <remarks>
+    /// The error tracking data serves multiple purposes:
+    /// 1. Unique request identification for correlation across logs and responses
+    /// 2. Timing information for performance analysis of error scenarios
+    /// 3. Distributed tracing support through correlation IDs
+    /// 4. Consistent metadata structure between successful and error responses
+    /// 
+    /// The tracking data is stored in HttpContext.Items to ensure it's available throughout
+    /// the request processing pipeline and can be accessed by other components if needed.
+    /// </remarks>
     private ErrorTrackingData InitializeErrorTracking(HttpContext context)
     {
         var requestId = Guid.NewGuid().ToString();
@@ -205,16 +257,29 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
 
     /// <summary>
     /// Handles exceptions by creating structured error responses with appropriate metadata and status codes.
-    /// This method serves as the central hub for exception processing and response generation.
+    /// This method serves as the central hub for exception processing and response generation,
+    /// using configured error messages for consistent user communication.
     /// </summary>
     /// <param name="context">The HTTP context for the current request</param>
     /// <param name="exception">The exception that occurred</param>
-    /// <param name="userMessage">User-friendly error message to include in the response</param>
-    /// <param name="errors">List of specific error messages</param>
-    /// <param name="statusCode">HTTP status code to return</param>
+    /// <param name="userMessage">User-friendly error message from configuration to include in the response</param>
+    /// <param name="errors">List of specific error messages providing additional detail</param>
+    /// <param name="statusCode">HTTP status code to return based on exception type</param>
     /// <param name="trackingData">Request tracking data for metadata generation</param>
     /// <param name="shouldLogAsError">Whether this exception should be logged as an error level</param>
     /// <returns>A task representing the asynchronous exception handling operation</returns>
+    /// <remarks>
+    /// This method implements the core error response generation strategy, providing:
+    /// 1. Appropriate logging based on exception severity and expected nature
+    /// 2. Structured error responses with comprehensive metadata
+    /// 3. Consistent error message formatting using configured messages
+    /// 4. Robust error handling that prevents infinite exception loops
+    /// 5. HTTP status code mapping that follows REST API best practices
+    /// 
+    /// The logging strategy differentiates between expected errors (validation, not found, etc.)
+    /// that are logged at information level and unexpected errors that are logged as errors.
+    /// This helps reduce noise in error logs while ensuring critical issues are properly captured.
+    /// </remarks>
     private async Task HandleExceptionAsync(
         HttpContext context,
         Exception exception,
@@ -268,6 +333,17 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     /// <param name="context">The HTTP context containing request information</param>
     /// <param name="trackingData">Error tracking data collected during processing</param>
     /// <returns>A task containing the complete error response metadata</returns>
+    /// <remarks>
+    /// The error metadata provides valuable information for debugging, monitoring, and analytics:
+    /// 1. Request identification and timing for performance analysis
+    /// 2. API version and routing information for endpoint analytics
+    /// 3. Database query statistics for performance optimization
+    /// 4. Client information for debugging and security analysis
+    /// 5. Correlation data for distributed tracing and log correlation
+    /// 
+    /// The metadata structure is identical to successful responses, ensuring consistency
+    /// in monitoring tools and client applications that process API responses.
+    /// </remarks>
     private Task<ResponseMetadata> BuildErrorMetadata(HttpContext context, ErrorTrackingData trackingData)
     {
         var request = context.Request;
@@ -309,6 +385,17 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     /// </summary>
     /// <param name="context">The HTTP context containing query statistics</param>
     /// <returns>Query metadata if available; otherwise, null</returns>
+    /// <remarks>
+    /// Query statistics in error scenarios can provide crucial insights into whether database
+    /// performance issues contributed to the error condition. This is particularly valuable for:
+    /// - Identifying timeout scenarios caused by slow queries
+    /// - Understanding resource contention issues
+    /// - Debugging transaction-related problems
+    /// - Analyzing query patterns that lead to exceptions
+    /// 
+    /// The statistics are populated by Entity Framework interceptors and provide the same
+    /// level of detail as successful requests for consistent performance analysis.
+    /// </remarks>
     private static QueryMetadata? ExtractQueryMetadata(HttpContext context)
     {
         if (context.Items["QueryStats"] is not Dictionary<string, object> queryStats)
@@ -330,6 +417,16 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     /// </summary>
     /// <param name="context">The HTTP context containing request information</param>
     /// <returns>Dictionary of additional metadata if any is found; otherwise, null</returns>
+    /// <remarks>
+    /// Additional metadata in error scenarios provides comprehensive context for debugging:
+    /// 1. Request characteristics (size, user agent) for understanding client behavior
+    /// 2. Client identification (IP address) for security analysis and rate limiting
+    /// 3. Authentication context for permission-related error analysis  
+    /// 4. Custom headers for application-specific debugging information
+    /// 
+    /// This metadata is particularly valuable in production environments where reproducing
+    /// errors can be challenging, providing the context needed for effective debugging.
+    /// </remarks>
     private static Dictionary<string, object>? ExtractAdditionalMetadata(HttpContext context)
     {
         var additional = new Dictionary<string, object>();
@@ -357,7 +454,7 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
         // Add custom headers for debugging
         var customHeaders = context.Request.Headers
             .Where(h => h.Key.StartsWith("X-Custom-", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(h => h.Key, h => (object)h.Value.ToString());
+            .ToDictionary(h => h.Key, object (h) => h.Value.ToString());
 
         foreach (var header in customHeaders)
         {
@@ -379,6 +476,15 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     /// </summary>
     /// <param name="context">The HTTP context containing request headers</param>
     /// <returns>The correlation ID for this request</returns>
+    /// <remarks>
+    /// Correlation ID extraction follows a priority hierarchy to ensure consistent tracing:
+    /// 1. Use existing X-Correlation-ID header if provided by the client
+    /// 2. Fall back to ASP.NET Core's TraceIdentifier for built-in tracing
+    /// 3. Generate a new GUID if no existing identifier is available
+    /// 
+    /// This approach ensures compatibility with existing distributed tracing systems
+    /// while providing fallback identification for standalone applications.
+    /// </remarks>
     private static string GetCorrelationId(HttpContext context)
     {
         return context.Request.Headers["X-Correlation-ID"].FirstOrDefault()
@@ -392,6 +498,17 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     /// </summary>
     /// <param name="context">The HTTP context containing version information</param>
     /// <returns>The API version string</returns>
+    /// <remarks>
+    /// API version extraction supports multiple common versioning approaches:
+    /// 1. Header-based versioning using X-API-Version header
+    /// 2. Query parameter versioning using the 'version' parameter
+    /// 3. Default to "1.0" if no version information is provided
+    /// 
+    /// Version information in error responses is valuable for:
+    /// - Understanding which API version generated specific error patterns
+    /// - Supporting multiple API versions with different error handling behaviors
+    /// - Providing version-specific error messaging or handling logic
+    /// </remarks>
     private static string GetApiVersion(HttpContext context)
     {
         return context.Request.Headers["X-API-Version"].FirstOrDefault()
@@ -406,6 +523,21 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     /// </summary>
     /// <param name="exception">The exception to create a safe message from</param>
     /// <returns>A safe error message appropriate for API response</returns>
+    /// <remarks>
+    /// The safe message strategy prevents information disclosure vulnerabilities while maintaining
+    /// useful error communication. The method maps common exception types to user-friendly messages
+    /// that provide guidance without exposing system internals.
+    /// 
+    /// For production environments, this method serves as an additional security layer,
+    /// ensuring that unexpected exceptions don't leak sensitive information such as:
+    /// - Database connection strings or schema information
+    /// - File system paths or internal service details
+    /// - Stack traces or internal error codes
+    /// - Configuration values or environment variables
+    /// 
+    /// The mapping can be extended to handle application-specific exception types
+    /// while maintaining the principle of minimal information disclosure.
+    /// </remarks>
     private static string GetSafeErrorMessage(Exception exception)
     {
         // For production environments, we might want to return generic messages
@@ -426,6 +558,17 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     /// Internal data structure for tracking error-specific information throughout the middleware lifecycle.
     /// This class encapsulates all the timing and identification data needed for error metadata generation.
     /// </summary>
+    /// <remarks>
+    /// The error tracking data provides a centralized structure for managing all error-related
+    /// metadata throughout the exception handling process. This includes:
+    /// 1. Unique request identification for correlation and debugging
+    /// 2. Distributed tracing support through correlation IDs
+    /// 3. Timing information for performance analysis of error scenarios
+    /// 4. Consistent data structure for metadata generation
+    /// 
+    /// The class is designed to be lightweight and focused solely on tracking information,
+    /// without any behavior or complex logic that might introduce additional error scenarios.
+    /// </remarks>
     private class ErrorTrackingData
     {
         /// <summary>

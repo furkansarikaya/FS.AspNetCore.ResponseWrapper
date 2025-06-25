@@ -40,6 +40,7 @@ public static class DependencyInjection
     /// - Query statistics: Disabled (requires additional setup)
     /// - DateTime provider: UTC DateTime
     /// - Response wrapping: Enabled for both success and error responses
+    /// - Error messages: Default English messages
     /// 
     /// The method automatically registers the filter globally, meaning all API controllers
     /// will have their responses wrapped without requiring additional attributes or configuration.
@@ -52,7 +53,7 @@ public static class DependencyInjection
     /// </example>
     public static IServiceCollection AddResponseWrapper(this IServiceCollection services)
     {
-        return services.AddResponseWrapper(options => { });
+        return services.AddResponseWrapper(options => { }, errorMessages => { });
     }
 
     /// <summary>
@@ -95,6 +96,59 @@ public static class DependencyInjection
         this IServiceCollection services, 
         Action<ResponseWrapperOptions> configureOptions)
     {
+        return services.AddResponseWrapper(configureOptions, errorMessages => { });
+    }
+
+    /// <summary>
+    /// Adds ResponseWrapper services to the dependency injection container with custom configuration options
+    /// and custom error messages. This method provides complete control over both behavior and messaging.
+    /// </summary>
+    /// <param name="services">The service collection to add ResponseWrapper services to</param>
+    /// <param name="configureOptions">
+    /// Action delegate that receives a ResponseWrapperOptions instance for configuration.
+    /// This allows you to customize behavior such as enabling query statistics,
+    /// excluding specific paths, or disabling certain metadata features.
+    /// </param>
+    /// <param name="configureErrorMessages">
+    /// Action delegate that receives an ErrorMessageConfiguration instance for customizing
+    /// error messages returned by the global exception handling middleware. This enables
+    /// complete control over user-facing error messaging, including localization support.
+    /// </param>
+    /// <returns>The service collection to enable method chaining in startup configuration</returns>
+    /// <remarks>
+    /// This method provides the most comprehensive configuration options for ResponseWrapper,
+    /// allowing customization of both technical behavior and user-facing messaging.
+    /// The error message configuration is particularly valuable for:
+    /// 
+    /// - Implementing consistent brand voice in error messages
+    /// - Supporting multiple languages and localization
+    /// - Providing domain-specific error terminology
+    /// - Meeting specific UX requirements for error handling
+    /// 
+    /// Both configuration actions are optional - passing empty actions will result in
+    /// default behavior and default English error messages being used.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// services.AddResponseWrapper(
+    ///     options =>
+    ///     {
+    ///         options.EnableQueryStatistics = true;
+    ///         options.ExcludedPaths = new[] { "/health", "/metrics" };
+    ///     },
+    ///     errorMessages =>
+    ///     {
+    ///         errorMessages.ValidationErrorMessage = "Please check your input and try again";
+    ///         errorMessages.NotFoundErrorMessage = "The requested item could not be found";
+    ///         errorMessages.UnauthorizedAccessMessage = "Please log in to access this resource";
+    ///     });
+    /// </code>
+    /// </example>
+    public static IServiceCollection AddResponseWrapper(
+        this IServiceCollection services, 
+        Action<ResponseWrapperOptions> configureOptions,
+        Action<ErrorMessageConfiguration> configureErrorMessages)
+    {
         // Validate input parameters to provide clear error messages
         if (services == null)
             throw new ArgumentNullException(nameof(services), "Service collection cannot be null");
@@ -102,15 +156,23 @@ public static class DependencyInjection
         if (configureOptions == null)
             throw new ArgumentNullException(nameof(configureOptions), "Configuration action cannot be null");
 
+        if (configureErrorMessages == null)
+            throw new ArgumentNullException(nameof(configureErrorMessages), "Error message configuration action cannot be null");
+
         try
         {
             // Create and configure options using the provided configuration action
             var options = new ResponseWrapperOptions();
             configureOptions(options);
 
-            // Register the configured options as a singleton for consistent access across the application
+            // Create and configure error messages using the provided configuration action
+            var errorMessages = new ErrorMessageConfiguration();
+            configureErrorMessages(errorMessages);
+
+            // Register the configured options and error messages as singletons for consistent access
             // Singleton lifetime ensures all components see the same configuration throughout the app lifecycle
             services.AddSingleton(options);
+            services.AddSingleton(errorMessages);
 
             // Configure DateTime provider - use custom one if provided, otherwise default to UTC
             // This pattern allows for dependency injection of time providers, which is crucial for testing
@@ -152,6 +214,10 @@ public static class DependencyInjection
     /// Optional action to configure additional ResponseWrapper options.
     /// If not provided, default options will be used for all other settings.
     /// </param>
+    /// <param name="configureErrorMessages">
+    /// Optional action to configure custom error messages.
+    /// If not provided, default English error messages will be used.
+    /// </param>
     /// <returns>The service collection to enable method chaining in startup configuration</returns>
     /// <remarks>
     /// This advanced registration method is designed for scenarios where you need fine-grained
@@ -161,6 +227,7 @@ public static class DependencyInjection
     /// 2. Multi-tenant applications with tenant-specific logging requirements  
     /// 3. Applications with specific timezone or time source requirements
     /// 4. Integration with custom observability platforms
+    /// 5. Applications requiring custom error message handling or localization
     /// 
     /// The method ensures that your custom logger is registered appropriately in the DI container
     /// and that the DateTime provider is used consistently across all ResponseWrapper components.
@@ -174,13 +241,19 @@ public static class DependencyInjection
     ///     {
     ///         options.EnableExecutionTimeTracking = true;
     ///         options.ExcludedPaths = new[] { "/internal" };
+    ///     },
+    ///     errorMessages =>
+    ///     {
+    ///         errorMessages.ValidationErrorMessage = "Custom validation message";
+    ///         errorMessages.NotFoundErrorMessage = "Custom not found message";
     ///     });
     /// </code>
     /// </example>
     public static IServiceCollection AddResponseWrapper<TLogger>(
         this IServiceCollection services,
         Func<DateTime> dateTimeProvider,
-        Action<ResponseWrapperOptions>? configureOptions = null)
+        Action<ResponseWrapperOptions>? configureOptions = null,
+        Action<ErrorMessageConfiguration>? configureErrorMessages = null)
         where TLogger : class, ILogger<ApiResponseWrapperFilter>
     {
         // Validate input parameters with descriptive error messages
@@ -196,11 +269,16 @@ public static class DependencyInjection
             var options = new ResponseWrapperOptions();
             configureOptions?.Invoke(options);
 
+            // Create and configure error messages, applying custom configuration if provided
+            var errorMessages = new ErrorMessageConfiguration();
+            configureErrorMessages?.Invoke(errorMessages);
+
             // Override DateTime provider with the explicitly provided one
             options.DateTimeProvider = dateTimeProvider;
 
-            // Register configured options and custom DateTime provider
+            // Register configured options, error messages, and custom DateTime provider
             services.AddSingleton(options);
+            services.AddSingleton(errorMessages);
             services.AddSingleton(dateTimeProvider);
 
             // Register custom logger if it's not already present in the container
@@ -292,9 +370,10 @@ public static class DependencyInjection
                 var logger = serviceProvider.GetRequiredService<ILogger<GlobalExceptionHandlingMiddleware>>();
                 var dateTimeFunc = serviceProvider.GetRequiredService<Func<DateTime>>();
                 var options = serviceProvider.GetRequiredService<ResponseWrapperOptions>();
+                var errorMessages = serviceProvider.GetRequiredService<ErrorMessageConfiguration>();
 
                 // Create middleware instance with resolved dependencies
-                return new GlobalExceptionHandlingMiddleware(logger, dateTimeFunc, options);
+                return new GlobalExceptionHandlingMiddleware(logger, dateTimeFunc, options, errorMessages);
             }
             catch (Exception ex)
             {
