@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using FS.AspNetCore.ResponseWrapper.Helpers;
 using FS.AspNetCore.ResponseWrapper.Models;
 using FS.AspNetCore.ResponseWrapper.Models.Paging;
@@ -97,9 +99,9 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
     private bool ShouldExcludeRequest(HttpContext httpContext)
     {
         var requestPath = httpContext.Request.Path.Value ?? string.Empty;
-        
+
         // Check if path is in exclusion list
-        return _options.ExcludedPaths.Any(excludedPath => 
+        return _options.ExcludedPaths.Any(excludedPath =>
             requestPath.StartsWith(excludedPath, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -178,7 +180,7 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
         if (result is ObjectResult objectResult && objectResult.Value != null)
         {
             var valueType = objectResult.Value.GetType();
-            return valueType.IsGenericType && 
+            return valueType.IsGenericType &&
                    valueType.GetGenericTypeDefinition() == typeof(ApiResponse<>);
         }
 
@@ -214,14 +216,14 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
                 ContentTypes = { "application/json" },
                 DeclaredType = wrappedResponse.GetType()
             },
-            
+
             ObjectResult _ => new ObjectResult(wrappedResponse)
             {
                 StatusCode = objectResult.StatusCode,
                 ContentTypes = objectResult.ContentTypes,
                 DeclaredType = wrappedResponse.GetType()
             },
-            
+
             _ => throw new InvalidOperationException($"Unhandled result type: {context.Result.GetType().Name}")
         };
     }
@@ -484,13 +486,13 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
     private object CreateWrappedResponse(object originalData, ResponseMetadata metadata)
     {
         var dataType = originalData.GetType();
-        
+
         // Extract status code and message BEFORE transformation
         var (extractedStatusCode, extractedMessage) = ExtractStatusCodeAndMessage(originalData);
-        
+
         // Transform paginated results (existing logic)
         var (transformedData, transformedDataType) = TransformPagedResult(originalData, dataType);
-        
+
         // Create clean data structure by removing status code properties
         var cleanData = CreateCleanDataStructure(transformedData, transformedDataType);
         var cleanDataType = cleanData.GetType();
@@ -513,7 +515,7 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
         dataProperty?.SetValue(response, cleanData);
         successProperty?.SetValue(response, true);
         metadataProperty?.SetValue(response, metadata);
-        
+
         // Set extracted status code at ApiResponse level
         if (!string.IsNullOrEmpty(extractedStatusCode))
         {
@@ -528,7 +530,7 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
             _logger.LogDebug("Promoted message to ApiResponse level");
         }
 
-        _logger.LogDebug("Successfully created clean ApiResponse<{CleanDataType}> with promoted metadata", 
+        _logger.LogDebug("Successfully created clean ApiResponse<{CleanDataType}> with promoted metadata",
             cleanDataType.Name);
 
         return response;
@@ -536,26 +538,26 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
 
     /// <summary>
     /// Creates a clean data structure by removing status code and metadata properties from the original data.
-    /// This method ensures that the response data contains only business-relevant information while
-    /// status and metadata are handled at the appropriate response wrapper level.
+    /// This method provides comprehensive property removal that works with any object type by creating
+    /// anonymous objects or dynamic structures containing only business-relevant properties.
     /// </summary>
     /// <param name="data">The original data that may contain status code properties</param>
     /// <param name="dataType">The type of the original data</param>
     /// <returns>A clean data structure without status code or metadata properties</returns>
     /// <remarks>
-    /// The clean data creation process follows these principles:
-    /// 1. **Single Source of Truth**: Status codes exist only at the ApiResponse level
-    /// 2. **Clean Separation**: Business data is free from metadata concerns
-    /// 3. **Backward Compatibility**: Maintains existing data structure for non-status responses
-    /// 4. **Type Safety**: Preserves strong typing while creating clean structures
+    /// This enhanced method provides universal status code property removal that works with any object type.
+    /// The method creates new object structures that exclude status code and metadata properties entirely,
+    /// ensuring clean separation between business data and response metadata across all supported types.
     /// 
-    /// The method handles various scenarios:
-    /// - Objects implementing IHasStatusCode get their status properties removed
-    /// - Objects with Message properties used for status communication get cleaned
-    /// - Other objects pass through unchanged to maintain compatibility
+    /// **Universal Compatibility**: Works with any object type, not just specific implementations,
+    /// making it suitable for a generic response wrapper framework that handles diverse response types.
     /// 
-    /// This approach ensures that API consumers receive clean, focused business data
-    /// while still having access to status information at the appropriate response level.
+    /// **Complete Property Removal**: Unlike approaches that nullify properties, this method creates
+    /// entirely new object structures without the unwanted properties, ensuring they don't appear
+    /// in JSON serialization output.
+    /// 
+    /// **Type-Safe Dynamic Creation**: Uses reflection and dynamic object creation to maintain
+    /// type safety while providing flexible property filtering for any object structure.
     /// </remarks>
     private object CreateCleanDataStructure(object data, Type dataType)
     {
@@ -570,271 +572,177 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
                 return data;
             }
 
-            // Check if the object or any of its properties might have status code properties
-            if (!HasStatusCodeProperties(data, dataType)) return data;
-            var cleanData = CreateCleanCopy(data, dataType);
-            if (cleanData == null) return data;
-            _logger.LogDebug("Created clean copy of {DataType}, removed status code properties", dataType.Name);
-            return cleanData;
+            // Check if the object has status code properties that need to be cleaned
+            if (!HasStatusCodeProperties(data, dataType))
+                return data;
 
+            _logger.LogDebug("Creating clean data structure for type {DataType} - removing status code properties", dataType.Name);
+
+            // Create anonymous object with only business properties
+            var cleanData = CreateAnonymousCleanObject(data, dataType);
+            if (cleanData == null)
+            {
+                _logger.LogWarning("Failed to create clean anonymous object for type {DataType}, using original data", dataType.Name);
+                return data;
+            }
+
+            _logger.LogDebug("Successfully created clean anonymous object for {DataType}, excluded status code properties", dataType.Name);
+            return cleanData;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to create clean data structure for type {DataType}. " +
-                                   "Using original data structure", dataType.Name);
+            _logger.LogError(ex, "Failed to create clean data structure for type {DataType}. " +
+                                 "Error details: {ErrorMessage}. Using original data structure",
+                dataType.Name, ex.Message);
             return data;
         }
     }
-    
-    /// <summary>
-    /// Determines if an object or its properties contain status code or metadata properties
-    /// that should be cleaned from the response data.
-    /// </summary>
-    /// <param name="data">The object to examine</param>
-    /// <param name="dataType">The type of the object</param>
-    /// <returns>True if the object contains properties that should be cleaned; otherwise, false</returns>
-    private bool HasStatusCodeProperties(object data, Type dataType)
-    {
-        // Quick check for IHasStatusCode implementation
-        if (data is IHasStatusCode)
-            return true;
-
-        // Check if the type has any properties we want to exclude
-        var properties = dataType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead);
-
-        foreach (var property in properties)
-        {
-            if (IsStatusOrMetadataProperty(property.Name))
-                return true;
-
-            // For collections, check if items might have status properties
-            if (!IsCollection(property.PropertyType)) continue;
-            try
-            {
-                var value = property.GetValue(data);
-                if (value != null && HasStatusPropertiesInCollection(value))
-                    return true;
-            }
-            catch
-            {
-                // If we can't check, err on the safe side
-                continue;
-            }
-        }
-
-        return false;
-    }
 
     /// <summary>
-    /// Checks if a collection contains items that might have status code properties.
+    /// Creates an anonymous object containing only business properties, excluding status code and metadata properties.
+    /// This method uses reflection to dynamically build a new object structure with only the desired properties.
     /// </summary>
-    private bool HasStatusPropertiesInCollection(object collection)
-    {
-        if (collection is not IEnumerable enumerable)
-            return false;
-
-        foreach (var item in enumerable)
-        {
-            if (item == null) continue;
-            
-            var itemType = item.GetType();
-            if (itemType.IsPrimitive || itemType == typeof(string) || itemType.IsValueType)
-                continue;
-
-            if (item is IHasStatusCode)
-                return true;
-
-            var properties = itemType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.CanRead);
-
-            if (properties.Any(p => IsStatusOrMetadataProperty(p.Name)))
-                return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Creates a clean copy of an object by copying all properties except status code and metadata properties.
-    /// This method uses reflection to create a new instance with only business-relevant data.
-    /// </summary>
-    /// <param name="source">The source object to copy from</param>
+    /// <param name="source">The source object to extract business properties from</param>
     /// <param name="sourceType">The type of the source object</param>
-    /// <returns>A new object with clean business data, or null if creation fails</returns>
-    private object? CreateCleanCopy(object source, Type sourceType)
+    /// <returns>An anonymous object with only business properties, or null if creation fails</returns>
+    /// <remarks>
+    /// This method implements dynamic object creation to solve the generic property filtering challenge.
+    /// By creating anonymous objects rather than modifying existing objects, it ensures complete removal
+    /// of unwanted properties from the serialization output.
+    /// 
+    /// **Dynamic Property Selection**: Uses reflection to identify business properties by excluding
+    /// known status code and metadata property names, making it adaptable to any object structure.
+    /// 
+    /// **Anonymous Object Benefits**: Anonymous objects provide clean serialization without carrying
+    /// unwanted properties, solving the fundamental issue of property visibility in JSON output.
+    /// 
+    /// **Recursive Cleaning**: Handles nested objects and collections by recursively applying the
+    /// same cleaning logic to maintain consistency throughout the object hierarchy.
+    /// </remarks>
+    private object? CreateAnonymousCleanObject(object source, Type sourceType)
     {
         if (source == null)
             return null;
 
-        // For primitive types or types that don't need cleaning, return as-is
-        if (sourceType.IsPrimitive || sourceType == typeof(string) || sourceType.IsValueType)
+        try
         {
-            return source;
-        }
+            _logger.LogDebug("Creating anonymous clean object for type {SourceType}", sourceType.Name);
 
-        // Handle collections
-        if (IsCollection(sourceType))
-        {
-            return CreateCleanCollection(source, sourceType);
-        }
-
-        // Create new instance for regular objects
-        var cleanInstance = Activator.CreateInstance(sourceType);
-        if (cleanInstance == null) 
-            return null;
-
-        // Copy all properties except status code and message properties
-        var properties = sourceType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead && p.CanWrite)
-            .Where(p => !IsStatusOrMetadataProperty(p.Name));
-
-        foreach (var property in properties)
-        {
-            try
+            // Handle collections
+            if (IsCollection(sourceType) && sourceType != typeof(string))
             {
-                var value = property.GetValue(source);
-                
-                if (value != null)
+                return CreateCleanCollection(source, sourceType);
+            }
+
+            // Get all readable properties excluding status code properties
+            var businessProperties = sourceType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanRead)
+                .Where(p => !IsStatusOrMetadataProperty(p.Name))
+                .ToArray();
+
+            if (businessProperties.Length == 0)
+            {
+                _logger.LogWarning("No business properties found for type {SourceType}", sourceType.Name);
+                return source;
+            }
+
+            // Create dictionary with business property values
+            var propertyValues = new Dictionary<string, object?>();
+
+            foreach (var property in businessProperties)
+            {
+                try
                 {
+                    var value = property.GetValue(source);
+
                     // Recursively clean nested objects
-                    var propertyType = property.PropertyType;
-                    
-                    if (ShouldRecursivelyClean(propertyType))
+                    if (value != null && ShouldRecursivelyClean(property.PropertyType))
                     {
-                        value = CreateCleanDataStructure(value, propertyType);
+                        value = CreateCleanDataStructure(value, property.PropertyType);
                     }
+
+                    propertyValues[property.Name] = value;
+                    _logger.LogTrace("Added business property {PropertyName} to clean object for type {SourceType}",
+                        property.Name, sourceType.Name);
                 }
-                
-                property.SetValue(cleanInstance, value);
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to extract property {PropertyName} from type {SourceType}, skipping",
+                        property.Name, sourceType.Name);
+                }
             }
-            catch (Exception ex)
+
+            // Convert to ExpandoObject for dynamic JSON serialization
+            dynamic cleanObject = new System.Dynamic.ExpandoObject();
+            var expandoDict = (IDictionary<string, object?>)cleanObject;
+
+            foreach (var kvp in propertyValues)
             {
-                _logger.LogDebug(ex, "Failed to copy property {PropertyName} while creating clean data structure", 
-                    property.Name);
-                // Continue with other properties
+                expandoDict[kvp.Key] = kvp.Value;
             }
+
+            _logger.LogDebug("Successfully created anonymous object with {PropertyCount} business properties for type {SourceType}. " +
+                             "Excluded properties: {ExcludedProperties}",
+                propertyValues.Count,
+                sourceType.Name,
+                string.Join(", ", sourceType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => IsStatusOrMetadataProperty(p.Name))
+                    .Select(p => p.Name)));
+
+            return cleanObject;
         }
-
-        return cleanInstance;
-    }
-    
-    /// <summary>
-    /// Creates a clean copy of a collection by recursively cleaning its items.
-    /// </summary>
-    private object? CreateCleanCollection(object source, Type sourceType)
-    {
-        if (source is not IEnumerable sourceEnumerable)
-            return source;
-
-        // Handle different collection types
-        if (sourceType.IsArray)
+        catch (Exception ex)
         {
-            return CreateCleanArray(sourceEnumerable, sourceType);
+            _logger.LogError(ex, "Unexpected error creating anonymous clean object for type {SourceType}", sourceType.Name);
+            return null;
         }
-
-        if (!sourceType.IsGenericType) return CreateCleanGenericCollection(sourceEnumerable);
-        var genericTypeDefinition = sourceType.GetGenericTypeDefinition();
-            
-        if (genericTypeDefinition == typeof(List<>) || 
-            genericTypeDefinition == typeof(IList<>) ||
-            genericTypeDefinition == typeof(ICollection<>) ||
-            genericTypeDefinition == typeof(IEnumerable<>))
-        {
-            return CreateCleanList(sourceEnumerable, sourceType);
-        }
-
-        // For other collection types, try to create a generic list
-        return CreateCleanGenericCollection(sourceEnumerable);
-    }
-
-    /// <summary>
-    /// Creates a clean array by cleaning each item.
-    /// </summary>
-    private Array? CreateCleanArray(IEnumerable source, Type arrayType)
-    {
-        var elementType = arrayType.GetElementType();
-        if (elementType == null) return null;
-
-        var items = source.Cast<object>().ToList();
-        var cleanArray = Array.CreateInstance(elementType, items.Count);
-
-        for (var i = 0; i < items.Count; i++)
-        {
-            var item = items[i];
-            if (item != null && ShouldRecursivelyClean(item.GetType()))
-            {
-                item = CreateCleanDataStructure(item, item.GetType());
-            }
-            cleanArray.SetValue(item, i);
-        }
-
-        return cleanArray;
-    }
-
-    /// <summary>
-    /// Creates a clean list by cleaning each item.
-    /// </summary>
-    private object? CreateCleanList(IEnumerable source, Type listType)
-    {
-        var elementType = listType.GetGenericArguments()[0];
-        var listConstructor = typeof(List<>).MakeGenericType(elementType);
-        var cleanList = Activator.CreateInstance(listConstructor);
-        
-        if (cleanList == null) return null;
-
-        var addMethod = listConstructor.GetMethod("Add");
-        if (addMethod == null) return null;
-
-        foreach (var item in source)
-        {
-            var cleanItem = item;
-            if (item != null && ShouldRecursivelyClean(item.GetType()))
-            {
-                cleanItem = CreateCleanDataStructure(item, item.GetType());
-            }
-            addMethod.Invoke(cleanList, [cleanItem]);
-        }
-
-        return cleanList;
-    }
-
-    /// <summary>
-    /// Creates a generic collection for unknown collection types.
-    /// </summary>
-    private List<object> CreateCleanGenericCollection(IEnumerable source)
-    {
-        var cleanList = new List<object>();
-
-        foreach (var item in source)
-        {
-            var cleanItem = item;
-            if (item != null && ShouldRecursivelyClean(item.GetType()))
-            {
-                cleanItem = CreateCleanDataStructure(item, item.GetType());
-            }
-            cleanList.Add(cleanItem);
-        }
-
-        return cleanList;
     }
 
     /// <summary>
     /// Determines whether a property name represents status code or metadata information
-    /// that should be excluded from clean data structures.
+    /// that should be excluded from clean data structures. This method provides the core
+    /// filtering logic for identifying properties that should be removed from business data.
     /// </summary>
     /// <param name="propertyName">The name of the property to check</param>
     /// <returns>True if the property should be excluded from clean data; otherwise, false</returns>
+    /// <remarks>
+    /// This method implements the business rule for distinguishing between business data
+    /// and metadata properties. The exclusion list can be extended to support additional
+    /// metadata property patterns as needed by different application domains.
+    /// 
+    /// **Standard Metadata Properties**: Identifies common property names used for status
+    /// codes and messages across different application architectures and frameworks.
+    /// 
+    /// **Case-Insensitive Matching**: Uses case-insensitive comparison to handle different
+    /// naming conventions (StatusCode, statusCode, STATUSCODE) consistently.
+    /// 
+    /// **Extensible Pattern**: The method can be easily extended to support additional
+    /// property name patterns or more sophisticated filtering rules as requirements evolve.
+    /// </remarks>
     private static bool IsStatusOrMetadataProperty(string propertyName)
     {
-        // Properties that should be excluded from clean data
-        var excludedProperties = new[] { "StatusCode", "Message", "Code", "ErrorCode", "Status" };
-        return excludedProperties.Contains(propertyName, StringComparer.OrdinalIgnoreCase);
+        // Properties that should be excluded from clean business data
+        var excludedProperties = new[]
+        {
+            "StatusCode", "Message"
+        };
+
+        var isExcluded = excludedProperties.Contains(propertyName, StringComparer.OrdinalIgnoreCase);
+
+        return isExcluded;
     }
-    
+
     /// <summary>
     /// Determines if a type represents a collection that should be processed recursively.
+    /// This method helps identify when special collection handling is needed during clean data creation.
     /// </summary>
+    /// <param name="type">The type to check for collection characteristics</param>
+    /// <returns>True if the type is a collection requiring special processing; otherwise, false</returns>
+    /// <remarks>
+    /// Collection detection is important for maintaining proper data structure during cleaning operations.
+    /// This method ensures that collections are processed appropriately while excluding string types
+    /// that implement IEnumerable but should be treated as primitive values.
+    /// </remarks>
     private static bool IsCollection(Type type)
     {
         return type != typeof(string) && typeof(IEnumerable).IsAssignableFrom(type);
@@ -842,15 +750,386 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
 
     /// <summary>
     /// Determines if a type should be recursively cleaned for status code properties.
+    /// This method helps optimize the cleaning process by identifying which types require
+    /// deep inspection for nested status code properties.
     /// </summary>
+    /// <param name="type">The type to evaluate for recursive cleaning requirements</param>
+    /// <returns>True if the type should undergo recursive cleaning; otherwise, false</returns>
+    /// <remarks>
+    /// This method implements performance optimization by avoiding unnecessary recursive processing
+    /// of types that cannot contain status code properties, while ensuring comprehensive cleaning
+    /// for complex object hierarchies that might contain nested metadata properties.
+    /// </remarks>
     private static bool ShouldRecursivelyClean(Type type)
     {
         // Don't recursively clean primitive types, strings, or value types
         if (type.IsPrimitive || type == typeof(string) || type.IsValueType)
             return false;
 
-        // Don't clean system types
+        // Don't clean system types unless they're collections
         return type.Namespace?.StartsWith("System") != true || IsCollection(type);
+    }
+
+    /// <summary>
+    /// Determines if an object or its properties contain status code or metadata properties
+    /// that should be cleaned from the response data. This method provides comprehensive
+    /// analysis of object structure to identify cleaning requirements.
+    /// </summary>
+    /// <param name="data">The object to examine for status code properties</param>
+    /// <param name="dataType">The type of the object</param>
+    /// <returns>True if the object contains properties that should be cleaned; otherwise, false</returns>
+    /// <remarks>
+    /// This method implements a comprehensive analysis strategy to identify objects that require
+    /// status code property removal. The analysis includes direct property inspection, interface
+    /// implementation checking, and collection item analysis to ensure complete coverage.
+    /// 
+    /// **Interface Detection**: Quickly identifies objects implementing IHasStatusCode interface
+    /// as candidates for cleaning, providing fast detection for the most common scenarios.
+    /// 
+    /// **Property-Based Analysis**: Examines object properties to identify status code and metadata
+    /// properties by name, enabling detection even when objects don't implement specific interfaces.
+    /// 
+    /// **Collection Analysis**: For collection types, samples collection items to determine if
+    /// they contain status code properties, ensuring nested cleaning requirements are identified.
+    /// 
+    /// **Performance Optimization**: Uses early exit strategies and caching where appropriate
+    /// to minimize performance impact on objects that don't require cleaning.
+    /// </remarks>
+    private bool HasStatusCodeProperties(object data, Type dataType)
+    {
+        if (data == null)
+            return false;
+
+        try
+        {
+            // Quick check for IHasStatusCode implementation - most reliable indicator
+            if (data is IHasStatusCode)
+            {
+                _logger.LogTrace("Object type {DataType} implements IHasStatusCode interface", dataType.Name);
+                return true;
+            }
+
+            // Check if the type has any properties we want to exclude
+            var properties = dataType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanRead)
+                .ToArray();
+
+            // Look for direct status code properties on the object
+            foreach (var property in properties)
+            {
+                if (!IsStatusOrMetadataProperty(property.Name)) continue;
+                _logger.LogTrace("Found status code property {PropertyName} in type {DataType}",
+                    property.Name, dataType.Name);
+                return true;
+            }
+
+            // For collections, check if items might have status properties
+            if (IsCollection(dataType) && dataType != typeof(string))
+            {
+                if (HasStatusPropertiesInCollection(data))
+                {
+                    _logger.LogTrace("Collection type {DataType} contains items with status code properties", dataType.Name);
+                    return true;
+                }
+            }
+
+            // For complex objects, check nested properties (limited depth to avoid performance issues)
+            foreach (var property in properties)
+            {
+                if (!ShouldCheckNestedProperty(property.PropertyType)) continue;
+                try
+                {
+                    var value = property.GetValue(data);
+                    if (value == null || !HasStatusCodeProperties(value, property.PropertyType)) continue;
+                    _logger.LogTrace("Nested property {PropertyName} in type {DataType} has status code properties",
+                        property.Name, dataType.Name);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogTrace(ex, "Failed to check nested property {PropertyName} in type {DataType}",
+                        property.Name, dataType.Name);
+                    // Continue checking other properties
+                }
+            }
+
+            _logger.LogTrace("No status code properties found in type {DataType}", dataType.Name);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error checking for status code properties in type {DataType}, assuming false", dataType.Name);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks if a collection contains items that might have status code properties.
+    /// This method samples collection items to determine cleaning requirements without
+    /// exhaustively examining every item for performance reasons.
+    /// </summary>
+    /// <param name="collection">The collection to examine for status code properties in items</param>
+    /// <returns>True if any items in the collection have status code properties; otherwise, false</returns>
+    /// <remarks>
+    /// This method implements a sampling strategy for collection analysis to balance thoroughness
+    /// with performance. Rather than examining every item in potentially large collections, it
+    /// samples a representative subset to determine if cleaning is required.
+    /// 
+    /// **Sampling Strategy**: Examines the first few items and a random sampling of larger
+    /// collections to efficiently detect status code properties without performance penalties.
+    /// 
+    /// **Type Diversity Handling**: For collections containing different types, the method
+    /// checks multiple items to ensure diverse type representation in the analysis.
+    /// 
+    /// **Performance Optimization**: Limits the number of items examined to prevent performance
+    /// degradation on large collections while maintaining detection reliability.
+    /// </remarks>
+    private bool HasStatusPropertiesInCollection(object collection)
+    {
+        if (collection is not IEnumerable enumerable)
+            return false;
+
+        try
+        {
+            var itemsChecked = 0;
+            const int maxItemsToCheck = 5; // Limit checks for performance
+
+            foreach (var item in enumerable)
+            {
+                if (item == null)
+                    continue;
+
+                var itemType = item.GetType();
+
+                // Skip primitive types and strings
+                if (itemType.IsPrimitive || itemType == typeof(string) || itemType.IsValueType)
+                    continue;
+
+                // Quick check for IHasStatusCode
+                if (item is IHasStatusCode)
+                {
+                    _logger.LogTrace("Found IHasStatusCode implementation in collection item of type {ItemType}", itemType.Name);
+                    return true;
+                }
+
+                // Check for status code properties in the item
+                var properties = itemType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => p.CanRead);
+
+                if (properties.Any(p => IsStatusOrMetadataProperty(p.Name)))
+                {
+                    _logger.LogTrace("Found status code properties in collection item of type {ItemType}", itemType.Name);
+                    return true;
+                }
+
+                itemsChecked++;
+                if (itemsChecked < maxItemsToCheck) continue;
+                _logger.LogTrace("Checked {ItemsChecked} collection items for status code properties, stopping for performance", itemsChecked);
+                break;
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogTrace(ex, "Error checking collection items for status code properties");
+            return false; // Assume no status properties if we can't check
+        }
+    }
+
+    /// <summary>
+    /// Creates a clean copy of a collection by recursively cleaning its items and preserving
+    /// the collection structure. This method handles various collection types and ensures
+    /// that nested status code properties are removed throughout the collection hierarchy.
+    /// </summary>
+    /// <param name="source">The source collection to create a clean copy from</param>
+    /// <param name="sourceType">The type of the source collection</param>
+    /// <returns>A clean collection with items processed for status code property removal</returns>
+    /// <remarks>
+    /// This method provides comprehensive collection cleaning that maintains collection structure
+    /// while ensuring all nested items are properly cleaned of status code and metadata properties.
+    /// The approach handles different collection types and maintains type safety where possible.
+    /// 
+    /// **Type Preservation**: Attempts to maintain the original collection type structure
+    /// when possible, falling back to generic collections when specific type reconstruction fails.
+    /// 
+    /// **Recursive Cleaning**: Applies the same cleaning logic recursively to collection items,
+    /// ensuring that nested objects and sub-collections are properly processed.
+    /// 
+    /// **Performance Optimization**: Uses efficient enumeration and construction patterns to
+    /// minimize performance impact during collection processing.
+    /// 
+    /// **Error Handling**: Includes comprehensive error handling to ensure that collection
+    /// processing failures don't break the entire response transformation process.
+    /// </remarks>
+    private object? CreateCleanCollection(object source, Type sourceType)
+    {
+        if (source is not IEnumerable sourceEnumerable)
+        {
+            _logger.LogWarning("Source object is not enumerable for type {SourceType}", sourceType.Name);
+            return source;
+        }
+
+        try
+        {
+            _logger.LogDebug("Creating clean collection for type {SourceType}", sourceType.Name);
+
+            var cleanItems = new List<object?>();
+            var itemsCleaned = 0;
+
+            foreach (var item in sourceEnumerable)
+            {
+                if (item == null)
+                {
+                    cleanItems.Add(null);
+                    continue;
+                }
+
+                var itemType = item.GetType();
+
+                // Clean the item if it needs cleaning
+                object? cleanItem = item;
+                if (ShouldRecursivelyClean(itemType))
+                {
+                    cleanItem = CreateCleanDataStructure(item, itemType);
+                    itemsCleaned++;
+                }
+
+                cleanItems.Add(cleanItem);
+            }
+
+            _logger.LogDebug("Processed {TotalItems} items in collection, cleaned {CleanedItems} items for type {SourceType}",
+                cleanItems.Count, itemsCleaned, sourceType.Name);
+
+            // Try to maintain collection type structure
+            if (sourceType.IsArray)
+            {
+                return CreateCleanArray(cleanItems, sourceType);
+            }
+
+            if (sourceType.IsGenericType)
+            {
+                var genericTypeDefinition = sourceType.GetGenericTypeDefinition();
+
+                if (genericTypeDefinition == typeof(List<>) ||
+                    genericTypeDefinition == typeof(IList<>) ||
+                    genericTypeDefinition == typeof(ICollection<>) ||
+                    genericTypeDefinition == typeof(IEnumerable<>))
+                {
+                    return CreateCleanList(cleanItems, sourceType);
+                }
+            }
+
+            // Fallback to generic list for unknown collection types
+            _logger.LogDebug("Using generic list fallback for collection type {SourceType}", sourceType.Name);
+            return cleanItems;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create clean collection for type {SourceType}", sourceType.Name);
+            return source; // Return original collection if cleaning fails
+        }
+    }
+
+    /// <summary>
+    /// Creates a clean array by processing each item and maintaining the array structure.
+    /// This method ensures that array types are properly reconstructed after cleaning.
+    /// </summary>
+    /// <param name="cleanItems">The list of cleaned items to convert to an array</param>
+    /// <param name="arrayType">The original array type to reconstruct</param>
+    /// <returns>A clean array with the original element type, or a generic array if type reconstruction fails</returns>
+    private Array? CreateCleanArray(List<object?> cleanItems, Type arrayType)
+    {
+        try
+        {
+            var elementType = arrayType.GetElementType();
+            if (elementType == null)
+            {
+                _logger.LogWarning("Could not determine element type for array type {ArrayType}", arrayType.Name);
+                return cleanItems.ToArray();
+            }
+
+            var cleanArray = Array.CreateInstance(elementType, cleanItems.Count);
+            for (var i = 0; i < cleanItems.Count; i++)
+            {
+                cleanArray.SetValue(cleanItems[i], i);
+            }
+
+            _logger.LogTrace("Successfully created clean array of type {ElementType}[] with {ItemCount} items",
+                elementType.Name, cleanItems.Count);
+            return cleanArray;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to create typed array for type {ArrayType}, using object array", arrayType.Name);
+            return cleanItems.ToArray();
+        }
+    }
+
+    /// <summary>
+    /// Creates a clean generic list by processing items and attempting to maintain the original generic type.
+    /// This method preserves List&lt;T&gt; types when possible for better type safety and client compatibility.
+    /// </summary>
+    /// <param name="cleanItems">The list of cleaned items to convert to a generic list</param>
+    /// <param name="listType">The original list type to reconstruct</param>
+    /// <returns>A clean generic list with the original element type, or a generic list if type reconstruction fails</returns>
+    private object? CreateCleanList(List<object?> cleanItems, Type listType)
+    {
+        try
+        {
+            var elementType = listType.GetGenericArguments()[0];
+            var listConstructor = typeof(List<>).MakeGenericType(elementType);
+            var cleanList = Activator.CreateInstance(listConstructor);
+
+            if (cleanList == null)
+            {
+                _logger.LogWarning("Failed to create instance of List<{ElementType}>", elementType.Name);
+                return cleanItems;
+            }
+
+            var addMethod = listConstructor.GetMethod("Add");
+            if (addMethod == null)
+            {
+                _logger.LogWarning("Could not find Add method for List<{ElementType}>", elementType.Name);
+                return cleanItems;
+            }
+
+            foreach (var item in cleanItems)
+            {
+                addMethod.Invoke(cleanList, [item]);
+            }
+
+            _logger.LogTrace("Successfully created clean List<{ElementType}> with {ItemCount} items",
+                elementType.Name, cleanItems.Count);
+            return cleanList;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to create typed list for type {ListType}, using generic list", listType.Name);
+            return cleanItems;
+        }
+    }
+
+    /// <summary>
+    /// Determines whether a nested property should be checked for status code properties.
+    /// This method provides optimization by limiting deep nested analysis to prevent performance issues.
+    /// </summary>
+    /// <param name="propertyType">The type of the property to evaluate</param>
+    /// <returns>True if the property should be checked for nested status code properties; otherwise, false</returns>
+    /// <remarks>
+    /// This method implements performance optimization for nested property analysis by identifying
+    /// types that are unlikely to contain status code properties and excluding them from deep analysis.
+    /// This prevents excessive recursion while ensuring comprehensive cleaning coverage.
+    /// </remarks>
+    private static bool ShouldCheckNestedProperty(Type propertyType)
+    {
+        // Don't check primitive types, strings, or value types
+        if (propertyType.IsPrimitive || propertyType == typeof(string) || propertyType.IsValueType)
+            return false;
+
+        // Don't check system types unless they're collections
+        return propertyType.Namespace?.StartsWith("System") != true || IsCollection(propertyType);
+        // Limit depth to prevent infinite recursion and performance issues
     }
 
     /// <summary>
@@ -902,7 +1181,7 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
                 // Try to extract using reflection for objects that don't implement IHasStatusCode
                 var dataType = data.GetType();
                 var statusCodeProperty = dataType.GetProperty("StatusCode", BindingFlags.Public | BindingFlags.Instance);
-                
+
                 if (statusCodeProperty?.PropertyType == typeof(string) && statusCodeProperty.CanRead)
                 {
                     statusCode = statusCodeProperty.GetValue(data) as string;
@@ -911,7 +1190,7 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
 
             // Extract message property if available
             var messageProperty = data.GetType().GetProperty("Message", BindingFlags.Public | BindingFlags.Instance);
-            
+
             if (messageProperty?.PropertyType == typeof(string) && messageProperty.CanRead)
             {
                 message = messageProperty.GetValue(data) as string;
@@ -923,45 +1202,6 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
         {
             _logger.LogWarning(ex, "Failed to extract status code from {DataType}", data.GetType().Name);
             return (null, null);
-        }
-    }
-
-    /// <summary>
-    /// Determines whether status code extraction should be performed for the given response data.
-    /// This method provides an optimization point where extraction can be skipped for response types
-    /// that are known not to contain status information.
-    /// </summary>
-    /// <param name="data">The response data to analyze</param>
-    /// <returns>True if status code extraction should be attempted; otherwise, false</returns>
-    /// <remarks>
-    /// This method enables performance optimization by allowing early exit from status code
-    /// extraction for response types that are known not to implement IHasStatusCode. The method
-    /// can be extended to include additional optimization logic based on type analysis or
-    /// configuration settings.
-    /// 
-    /// Current optimization strategies include:
-    /// - Quick check for IHasStatusCode implementation
-    /// - Type-based exclusions for known non-status types
-    /// - Early exit for null or primitive types
-    /// 
-    /// This optimization is particularly valuable in high-throughput scenarios where the majority
-    /// of responses don't require status code extraction.
-    /// </remarks>
-    private static bool ShouldExtractStatusCode(object data)
-    {
-        switch (data)
-        {
-            case null:
-                return false;
-            // Quick check if the object implements IHasStatusCode
-            case IHasStatusCode:
-                return true;
-            default:
-            {
-                // Skip extraction for primitive types and known system types
-                var dataType = data.GetType();
-                return !dataType.IsPrimitive && dataType != typeof(string) && dataType != typeof(DateTime);
-            }
         }
     }
 
