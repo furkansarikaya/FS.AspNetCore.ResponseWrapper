@@ -1,0 +1,6 @@
+@FS.AspNetCore.ResponseWrapper.Examples_HostAddress = http://localhost:5263
+
+GET {{FS.AspNetCore.ResponseWrapper.Examples_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
