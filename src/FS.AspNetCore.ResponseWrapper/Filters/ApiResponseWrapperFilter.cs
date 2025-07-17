@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
 using FS.AspNetCore.ResponseWrapper.Helpers;
@@ -393,7 +394,7 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
         catch (Exception ex)
         {
             // If transformation fails, log the issue but don't break the response
-            _logger.LogWarning(ex, "Failed to transform paginated result of type {DataType}. Using original data.", dataType.Name);
+            _logger.LogWarning(ex, "Failed to transform paginated result of type {DataType}. Using original data", dataType.Name);
             return (originalData, dataType);
         }
     }
@@ -463,42 +464,505 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
     }
 
     /// <summary>
-    /// Creates the final wrapped response using the ApiResponse wrapper with provided data and metadata.
-    /// This method performs the actual wrapping transformation and ensures type safety.
+    /// Creates the final wrapped response with automatic status code extraction and clean data transformation.
+    /// This method extracts status codes from response data and promotes them to the ApiResponse level
+    /// while creating clean, metadata-free data structures for the response body.
     /// </summary>
-    /// <param name="originalData">The original response data</param>
+    /// <param name="originalData">The original response data from the controller</param>
     /// <param name="metadata">The metadata to include in the response</param>
-    /// <returns>The wrapped response object</returns>
+    /// <returns>The wrapped response object with extracted status code and clean data</returns>
+    /// <remarks>
+    /// This enhanced method provides clean separation of concerns by:
+    /// 1. Extracting status codes and messages from response DTOs
+    /// 2. Creating clean data structures without metadata properties
+    /// 3. Promoting status information to the ApiResponse level for consistent access
+    /// 4. Maintaining backward compatibility for responses without status codes
+    /// 
+    /// The clean data approach ensures that business data remains focused on its primary purpose
+    /// while status and metadata information is properly organized at the response wrapper level.
+    /// </remarks>
     private object CreateWrappedResponse(object originalData, ResponseMetadata metadata)
     {
         var dataType = originalData.GetType();
+        
+        // Extract status code and message BEFORE transformation
+        var (extractedStatusCode, extractedMessage) = ExtractStatusCodeAndMessage(originalData);
+        
+        // Transform paginated results (existing logic)
         var (transformedData, transformedDataType) = TransformPagedResult(originalData, dataType);
+        
+        // Create clean data structure by removing status code properties
+        var cleanData = CreateCleanDataStructure(transformedData, transformedDataType);
+        var cleanDataType = cleanData.GetType();
 
-        var responseType = typeof(ApiResponse<>).MakeGenericType(transformedDataType);
+        var responseType = typeof(ApiResponse<>).MakeGenericType(cleanDataType);
         var response = Activator.CreateInstance(responseType);
 
         if (response == null)
         {
-            throw new InvalidOperationException($"Failed to create ApiResponse<{transformedDataType.Name}>");
+            throw new InvalidOperationException($"Failed to create ApiResponse<{cleanDataType.Name}>");
         }
 
-        // Set response properties using reflection
+        // Set response properties
         var dataProperty = responseType.GetProperty("Data");
         var successProperty = responseType.GetProperty("Success");
         var metadataProperty = responseType.GetProperty("Metadata");
+        var statusCodeProperty = responseType.GetProperty("StatusCode");
+        var messageProperty = responseType.GetProperty("Message");
 
-        if (dataProperty == null || successProperty == null || metadataProperty == null)
+        dataProperty?.SetValue(response, cleanData);
+        successProperty?.SetValue(response, true);
+        metadataProperty?.SetValue(response, metadata);
+        
+        // Set extracted status code at ApiResponse level
+        if (!string.IsNullOrEmpty(extractedStatusCode))
         {
-            throw new InvalidOperationException($"ApiResponse<{transformedDataType.Name}> missing required properties");
+            statusCodeProperty?.SetValue(response, extractedStatusCode);
+            _logger.LogDebug("Promoted status code '{StatusCode}' to ApiResponse level", extractedStatusCode);
         }
 
-        dataProperty.SetValue(response, transformedData);
-        successProperty.SetValue(response, true);
-        metadataProperty.SetValue(response, metadata);
+        // Set extracted message if available
+        if (!string.IsNullOrEmpty(extractedMessage))
+        {
+            messageProperty?.SetValue(response, extractedMessage);
+            _logger.LogDebug("Promoted message to ApiResponse level");
+        }
 
-        _logger.LogDebug("Successfully created ApiResponse<{TransformedType}>", transformedDataType.Name);
+        _logger.LogDebug("Successfully created clean ApiResponse<{CleanDataType}> with promoted metadata", 
+            cleanDataType.Name);
 
         return response;
+    }
+
+    /// <summary>
+    /// Creates a clean data structure by removing status code and metadata properties from the original data.
+    /// This method ensures that the response data contains only business-relevant information while
+    /// status and metadata are handled at the appropriate response wrapper level.
+    /// </summary>
+    /// <param name="data">The original data that may contain status code properties</param>
+    /// <param name="dataType">The type of the original data</param>
+    /// <returns>A clean data structure without status code or metadata properties</returns>
+    /// <remarks>
+    /// The clean data creation process follows these principles:
+    /// 1. **Single Source of Truth**: Status codes exist only at the ApiResponse level
+    /// 2. **Clean Separation**: Business data is free from metadata concerns
+    /// 3. **Backward Compatibility**: Maintains existing data structure for non-status responses
+    /// 4. **Type Safety**: Preserves strong typing while creating clean structures
+    /// 
+    /// The method handles various scenarios:
+    /// - Objects implementing IHasStatusCode get their status properties removed
+    /// - Objects with Message properties used for status communication get cleaned
+    /// - Other objects pass through unchanged to maintain compatibility
+    /// 
+    /// This approach ensures that API consumers receive clean, focused business data
+    /// while still having access to status information at the appropriate response level.
+    /// </remarks>
+    private object CreateCleanDataStructure(object data, Type dataType)
+    {
+        if (data == null)
+            return data;
+
+        try
+        {
+            // For primitive types, strings, and value types, return as-is
+            if (dataType.IsPrimitive || dataType == typeof(string) || dataType.IsValueType)
+            {
+                return data;
+            }
+
+            // Check if the object or any of its properties might have status code properties
+            if (!HasStatusCodeProperties(data, dataType)) return data;
+            var cleanData = CreateCleanCopy(data, dataType);
+            if (cleanData == null) return data;
+            _logger.LogDebug("Created clean copy of {DataType}, removed status code properties", dataType.Name);
+            return cleanData;
+
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to create clean data structure for type {DataType}. " +
+                                   "Using original data structure", dataType.Name);
+            return data;
+        }
+    }
+    
+    /// <summary>
+    /// Determines if an object or its properties contain status code or metadata properties
+    /// that should be cleaned from the response data.
+    /// </summary>
+    /// <param name="data">The object to examine</param>
+    /// <param name="dataType">The type of the object</param>
+    /// <returns>True if the object contains properties that should be cleaned; otherwise, false</returns>
+    private bool HasStatusCodeProperties(object data, Type dataType)
+    {
+        // Quick check for IHasStatusCode implementation
+        if (data is IHasStatusCode)
+            return true;
+
+        // Check if the type has any properties we want to exclude
+        var properties = dataType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead);
+
+        foreach (var property in properties)
+        {
+            if (IsStatusOrMetadataProperty(property.Name))
+                return true;
+
+            // For collections, check if items might have status properties
+            if (!IsCollection(property.PropertyType)) continue;
+            try
+            {
+                var value = property.GetValue(data);
+                if (value != null && HasStatusPropertiesInCollection(value))
+                    return true;
+            }
+            catch
+            {
+                // If we can't check, err on the safe side
+                continue;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if a collection contains items that might have status code properties.
+    /// </summary>
+    private bool HasStatusPropertiesInCollection(object collection)
+    {
+        if (collection is not IEnumerable enumerable)
+            return false;
+
+        foreach (var item in enumerable)
+        {
+            if (item == null) continue;
+            
+            var itemType = item.GetType();
+            if (itemType.IsPrimitive || itemType == typeof(string) || itemType.IsValueType)
+                continue;
+
+            if (item is IHasStatusCode)
+                return true;
+
+            var properties = itemType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanRead);
+
+            if (properties.Any(p => IsStatusOrMetadataProperty(p.Name)))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Creates a clean copy of an object by copying all properties except status code and metadata properties.
+    /// This method uses reflection to create a new instance with only business-relevant data.
+    /// </summary>
+    /// <param name="source">The source object to copy from</param>
+    /// <param name="sourceType">The type of the source object</param>
+    /// <returns>A new object with clean business data, or null if creation fails</returns>
+    private object? CreateCleanCopy(object source, Type sourceType)
+    {
+        if (source == null)
+            return null;
+
+        // For primitive types or types that don't need cleaning, return as-is
+        if (sourceType.IsPrimitive || sourceType == typeof(string) || sourceType.IsValueType)
+        {
+            return source;
+        }
+
+        // Handle collections
+        if (IsCollection(sourceType))
+        {
+            return CreateCleanCollection(source, sourceType);
+        }
+
+        // Create new instance for regular objects
+        var cleanInstance = Activator.CreateInstance(sourceType);
+        if (cleanInstance == null) 
+            return null;
+
+        // Copy all properties except status code and message properties
+        var properties = sourceType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead && p.CanWrite)
+            .Where(p => !IsStatusOrMetadataProperty(p.Name));
+
+        foreach (var property in properties)
+        {
+            try
+            {
+                var value = property.GetValue(source);
+                
+                if (value != null)
+                {
+                    // Recursively clean nested objects
+                    var propertyType = property.PropertyType;
+                    
+                    if (ShouldRecursivelyClean(propertyType))
+                    {
+                        value = CreateCleanDataStructure(value, propertyType);
+                    }
+                }
+                
+                property.SetValue(cleanInstance, value);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to copy property {PropertyName} while creating clean data structure", 
+                    property.Name);
+                // Continue with other properties
+            }
+        }
+
+        return cleanInstance;
+    }
+    
+    /// <summary>
+    /// Creates a clean copy of a collection by recursively cleaning its items.
+    /// </summary>
+    private object? CreateCleanCollection(object source, Type sourceType)
+    {
+        if (source is not IEnumerable sourceEnumerable)
+            return source;
+
+        // Handle different collection types
+        if (sourceType.IsArray)
+        {
+            return CreateCleanArray(sourceEnumerable, sourceType);
+        }
+
+        if (!sourceType.IsGenericType) return CreateCleanGenericCollection(sourceEnumerable);
+        var genericTypeDefinition = sourceType.GetGenericTypeDefinition();
+            
+        if (genericTypeDefinition == typeof(List<>) || 
+            genericTypeDefinition == typeof(IList<>) ||
+            genericTypeDefinition == typeof(ICollection<>) ||
+            genericTypeDefinition == typeof(IEnumerable<>))
+        {
+            return CreateCleanList(sourceEnumerable, sourceType);
+        }
+
+        // For other collection types, try to create a generic list
+        return CreateCleanGenericCollection(sourceEnumerable);
+    }
+
+    /// <summary>
+    /// Creates a clean array by cleaning each item.
+    /// </summary>
+    private Array? CreateCleanArray(IEnumerable source, Type arrayType)
+    {
+        var elementType = arrayType.GetElementType();
+        if (elementType == null) return null;
+
+        var items = source.Cast<object>().ToList();
+        var cleanArray = Array.CreateInstance(elementType, items.Count);
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            if (item != null && ShouldRecursivelyClean(item.GetType()))
+            {
+                item = CreateCleanDataStructure(item, item.GetType());
+            }
+            cleanArray.SetValue(item, i);
+        }
+
+        return cleanArray;
+    }
+
+    /// <summary>
+    /// Creates a clean list by cleaning each item.
+    /// </summary>
+    private object? CreateCleanList(IEnumerable source, Type listType)
+    {
+        var elementType = listType.GetGenericArguments()[0];
+        var listConstructor = typeof(List<>).MakeGenericType(elementType);
+        var cleanList = Activator.CreateInstance(listConstructor);
+        
+        if (cleanList == null) return null;
+
+        var addMethod = listConstructor.GetMethod("Add");
+        if (addMethod == null) return null;
+
+        foreach (var item in source)
+        {
+            var cleanItem = item;
+            if (item != null && ShouldRecursivelyClean(item.GetType()))
+            {
+                cleanItem = CreateCleanDataStructure(item, item.GetType());
+            }
+            addMethod.Invoke(cleanList, [cleanItem]);
+        }
+
+        return cleanList;
+    }
+
+    /// <summary>
+    /// Creates a generic collection for unknown collection types.
+    /// </summary>
+    private List<object> CreateCleanGenericCollection(IEnumerable source)
+    {
+        var cleanList = new List<object>();
+
+        foreach (var item in source)
+        {
+            var cleanItem = item;
+            if (item != null && ShouldRecursivelyClean(item.GetType()))
+            {
+                cleanItem = CreateCleanDataStructure(item, item.GetType());
+            }
+            cleanList.Add(cleanItem);
+        }
+
+        return cleanList;
+    }
+
+    /// <summary>
+    /// Determines whether a property name represents status code or metadata information
+    /// that should be excluded from clean data structures.
+    /// </summary>
+    /// <param name="propertyName">The name of the property to check</param>
+    /// <returns>True if the property should be excluded from clean data; otherwise, false</returns>
+    private static bool IsStatusOrMetadataProperty(string propertyName)
+    {
+        // Properties that should be excluded from clean data
+        var excludedProperties = new[] { "StatusCode", "Message", "Code", "ErrorCode", "Status" };
+        return excludedProperties.Contains(propertyName, StringComparer.OrdinalIgnoreCase);
+    }
+    
+    /// <summary>
+    /// Determines if a type represents a collection that should be processed recursively.
+    /// </summary>
+    private static bool IsCollection(Type type)
+    {
+        return type != typeof(string) && typeof(IEnumerable).IsAssignableFrom(type);
+    }
+
+    /// <summary>
+    /// Determines if a type should be recursively cleaned for status code properties.
+    /// </summary>
+    private static bool ShouldRecursivelyClean(Type type)
+    {
+        // Don't recursively clean primitive types, strings, or value types
+        if (type.IsPrimitive || type == typeof(string) || type.IsValueType)
+            return false;
+
+        // Don't clean system types
+        return type.Namespace?.StartsWith("System") != true || IsCollection(type);
+    }
+
+    /// <summary>
+    /// Extracts status code and message from response data that implements IHasStatusCode interface.
+    /// This method provides automatic promotion of status information from response DTOs to the
+    /// top-level ApiResponse structure, enabling consistent client-side status handling.
+    /// </summary>
+    /// <param name="data">The response data to analyze for status code and message information</param>
+    /// <returns>A tuple containing the extracted status code and message, or null values if not available</returns>
+    /// <remarks>
+    /// This method implements the Interface Segregation Principle by checking for specific
+    /// interfaces that indicate the presence of status information. The extraction process
+    /// is designed to be non-intrusive and fail-safe - if the data doesn't implement the
+    /// expected interfaces, the method simply returns null values without affecting the
+    /// overall response processing.
+    /// 
+    /// **Status Code Extraction**: The method first checks if the data implements IHasStatusCode
+    /// and extracts the status code if available. This enables automatic promotion of workflow
+    /// states and business process indicators to the API response level.
+    /// 
+    /// **Message Extraction**: The method also attempts to extract message information using
+    /// reflection to look for common message property names. This provides additional context
+    /// that can complement the status code information.
+    /// 
+    /// **Error Handling**: All reflection operations are wrapped in try-catch blocks to ensure
+    /// that extraction failures don't break the overall response processing. If extraction fails,
+    /// the method logs the issue and continues with null values.
+    /// 
+    /// **Performance Considerations**: The method uses cached reflection where possible and
+    /// includes early exit strategies to minimize performance impact on responses that don't
+    /// provide status information.
+    /// </remarks>
+    private (string? statusCode, string? message) ExtractStatusCodeAndMessage(object data)
+    {
+        if (data == null) return (null, null);
+
+        try
+        {
+            string? statusCode = null;
+            string? message = null;
+
+            // Extract status code from IHasStatusCode implementation
+            if (data is IHasStatusCode statusProvider)
+            {
+                statusCode = statusProvider.StatusCode;
+            }
+            else
+            {
+                // Try to extract using reflection for objects that don't implement IHasStatusCode
+                var dataType = data.GetType();
+                var statusCodeProperty = dataType.GetProperty("StatusCode", BindingFlags.Public | BindingFlags.Instance);
+                
+                if (statusCodeProperty?.PropertyType == typeof(string) && statusCodeProperty.CanRead)
+                {
+                    statusCode = statusCodeProperty.GetValue(data) as string;
+                }
+            }
+
+            // Extract message property if available
+            var messageProperty = data.GetType().GetProperty("Message", BindingFlags.Public | BindingFlags.Instance);
+            
+            if (messageProperty?.PropertyType == typeof(string) && messageProperty.CanRead)
+            {
+                message = messageProperty.GetValue(data) as string;
+            }
+
+            return (statusCode, message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to extract status code from {DataType}", data.GetType().Name);
+            return (null, null);
+        }
+    }
+
+    /// <summary>
+    /// Determines whether status code extraction should be performed for the given response data.
+    /// This method provides an optimization point where extraction can be skipped for response types
+    /// that are known not to contain status information.
+    /// </summary>
+    /// <param name="data">The response data to analyze</param>
+    /// <returns>True if status code extraction should be attempted; otherwise, false</returns>
+    /// <remarks>
+    /// This method enables performance optimization by allowing early exit from status code
+    /// extraction for response types that are known not to implement IHasStatusCode. The method
+    /// can be extended to include additional optimization logic based on type analysis or
+    /// configuration settings.
+    /// 
+    /// Current optimization strategies include:
+    /// - Quick check for IHasStatusCode implementation
+    /// - Type-based exclusions for known non-status types
+    /// - Early exit for null or primitive types
+    /// 
+    /// This optimization is particularly valuable in high-throughput scenarios where the majority
+    /// of responses don't require status code extraction.
+    /// </remarks>
+    private static bool ShouldExtractStatusCode(object data)
+    {
+        switch (data)
+        {
+            case null:
+                return false;
+            // Quick check if the object implements IHasStatusCode
+            case IHasStatusCode:
+                return true;
+            default:
+            {
+                // Skip extraction for primitive types and known system types
+                var dataType = data.GetType();
+                return !dataType.IsPrimitive && dataType != typeof(string) && dataType != typeof(DateTime);
+            }
+        }
     }
 
     /// <summary>

@@ -112,7 +112,7 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
                 exception.Errors.Values.SelectMany(x => x).ToList(),
                 HttpStatusCode.BadRequest,
                 errorTrackingData,
-                shouldLogAsError: false); // Validation errors are expected, don't log as errors
+                shouldLogAsError: false);
         }
         catch (NotFoundException exception)
         {
@@ -123,7 +123,29 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
                 [exception.Message],
                 HttpStatusCode.NotFound,
                 errorTrackingData,
-                shouldLogAsError: false); // Not found is expected, don't log as error
+                shouldLogAsError: false);
+        }
+        catch (ConflictException exception)
+        {
+            await HandleExceptionAsync(
+                context,
+                exception,
+                exception.Message, // ConflictException messages are usually specific enough
+                [exception.Message],
+                HttpStatusCode.Conflict,
+                errorTrackingData,
+                shouldLogAsError: false);
+        }
+        catch (UnauthorizedException exception)
+        {
+            await HandleExceptionAsync(
+                context,
+                exception,
+                _errorMessages.GetUnauthorizedAccessMessage(),
+                [exception.Message],
+                HttpStatusCode.Unauthorized,
+                errorTrackingData,
+                shouldLogAsError: false);
         }
         catch (ForbiddenAccessException exception)
         {
@@ -134,18 +156,59 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
                 [exception.Message],
                 HttpStatusCode.Forbidden,
                 errorTrackingData,
-                shouldLogAsError: false); // Authorization failures are expected
+                shouldLogAsError: false);
         }
-        catch (UnauthorizedAccessException exception)
+        catch (BadRequestException exception)
         {
             await HandleExceptionAsync(
                 context,
                 exception,
-                _errorMessages.GetUnauthorizedAccessMessage(),
+                exception.Message,
                 [exception.Message],
-                HttpStatusCode.Unauthorized,
+                HttpStatusCode.BadRequest,
                 errorTrackingData,
-                shouldLogAsError: false); // Auth failures are expected
+                shouldLogAsError: false);
+        }
+        catch (Exceptions.TimeoutException exception)
+        {
+            await HandleExceptionAsync(
+                context,
+                exception,
+                "The request timed out. Please try again later.",
+                [exception.Message],
+                HttpStatusCode.RequestTimeout,
+                errorTrackingData,
+                shouldLogAsError: true); // Timeouts might indicate system issues
+        }
+        catch (TooManyRequestsException exception)
+        {
+            await HandleExceptionAsync(
+                context,
+                exception,
+                "Too many requests. Please slow down and try again later.",
+                [exception.Message],
+                (HttpStatusCode)429, // HTTP 429 Too Many Requests
+                errorTrackingData,
+                shouldLogAsError: false); // Rate limiting is expected behavior
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            await HandleExceptionAsync(
+                context,
+                exception,
+                "Service temporarily unavailable. Please try again later.",
+                [exception.Message],
+                HttpStatusCode.ServiceUnavailable,
+                errorTrackingData,
+                shouldLogAsError: true); // Service unavailability should be logged
+        }
+        catch (CustomHttpStatusException exception)
+        {
+            // Handle custom HTTP status codes
+            await HandleCustomHttpStatusExceptionAsync(
+                context,
+                exception,
+                errorTrackingData);
         }
         catch (BusinessException exception)
         {
@@ -157,6 +220,18 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
                 HttpStatusCode.BadRequest,
                 errorTrackingData,
                 shouldLogAsError: false); // Business rule violations are expected
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            // Handle system UnauthorizedAccessException (different from our UnauthorizedException)
+            await HandleExceptionAsync(
+                context,
+                exception,
+                _errorMessages.GetUnauthorizedAccessMessage(),
+                [exception.Message],
+                HttpStatusCode.Unauthorized,
+                errorTrackingData,
+                shouldLogAsError: false);
         }
         catch (ApplicationException exception)
         {
@@ -190,6 +265,8 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
         }
     }
 
+    
+    
     /// <summary>
     /// Determines whether a request should be excluded from error wrapping based on configuration.
     /// This method provides early exit for requests that should handle errors in their own way.
@@ -254,31 +331,117 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
 
         return trackingData;
     }
+    
+    /// <summary>
+    /// Handles CustomHttpStatusException with support for custom HTTP status codes while maintaining
+    /// the structured error response format and error code extraction functionality.
+    /// </summary>
+    /// <param name="context">The HTTP context for the current request</param>
+    /// <param name="exception">The CustomHttpStatusException containing custom status code information</param>
+    /// <param name="trackingData">Error tracking data for metadata generation</param>
+    /// <returns>A task representing the asynchronous custom exception handling operation</returns>
+    /// <remarks>
+    /// This specialized handling method enables applications to use any HTTP status code while
+    /// maintaining consistency with the ResponseWrapper error handling system. The method preserves
+    /// all standard ResponseWrapper functionality including error codes, metadata generation,
+    /// and structured error responses while allowing complete control over HTTP semantics.
+    /// 
+    /// **Custom Status Code Support**: The method extracts the custom HTTP status code from the
+    /// exception and applies it to the response, enabling precise control over HTTP semantics
+    /// for specialized error scenarios or integration requirements.
+    /// 
+    /// **Consistent Error Structure**: Despite the flexible status code, the method maintains
+    /// the same structured error response format as other exception handlers, ensuring consistent
+    /// client-side error handling regardless of the specific HTTP status code used.
+    /// 
+    /// **Error Code Preservation**: The method preserves and promotes error codes from the
+    /// exception to the ApiResponse level, maintaining rich error identification capabilities
+    /// even with custom HTTP status codes.
+    /// </remarks>
+    private async Task HandleCustomHttpStatusExceptionAsync(
+        HttpContext context,
+        CustomHttpStatusException exception,
+        ErrorTrackingData trackingData)
+    {
+        // Determine logging level based on HTTP status code
+        var shouldLogAsError = exception.HttpStatusCode >= 500;
+        
+        // Use custom HTTP status code from exception
+        var statusCode = (HttpStatusCode)exception.HttpStatusCode;
+
+        // Log the exception appropriately based on status code
+        if (shouldLogAsError)
+        {
+            _logger.LogError(exception, "Custom HTTP status error {StatusCode} processing request {RequestId}: {Message}",
+                exception.HttpStatusCode, trackingData.RequestId, exception.Message);
+        }
+        else
+        {
+            _logger.LogInformation("Request {RequestId} resulted in custom status {StatusCode}: {Message}",
+                trackingData.RequestId, exception.HttpStatusCode, exception.Message);
+        }
+
+        // Create the error response with metadata
+        var errorResponse = ApiResponse<object>.ErrorResult([exception.Message]);
+        errorResponse.Message = exception.Message;
+        
+        // Extract and set error code from the exception
+        var extractedErrorCode = ExtractErrorCode(exception);
+        if (!string.IsNullOrEmpty(extractedErrorCode))
+        {
+            errorResponse.StatusCode = extractedErrorCode;
+            _logger.LogDebug("Extracted error code '{ErrorCode}' from CustomHttpStatusException", 
+                extractedErrorCode);
+        }
+
+        // Build and attach metadata
+        errorResponse.Metadata = await BuildErrorMetadata(context, trackingData);
+
+        // Set response properties with custom status code
+        context.Response.StatusCode = exception.HttpStatusCode;
+        context.Response.ContentType = "application/json";
+
+        try
+        {
+            await context.Response.WriteAsJsonAsync(errorResponse);
+        }
+        catch (Exception writeException)
+        {
+            _logger.LogError(writeException, "Failed to write custom status error response for request {RequestId}",
+                trackingData.RequestId);
+        }
+    }
 
     /// <summary>
-    /// Handles exceptions by creating structured error responses with appropriate metadata and status codes.
-    /// This method serves as the central hub for exception processing and response generation,
-    /// using configured error messages for consistent user communication.
+    /// Enhanced exception handling with automatic error code extraction and promotion for all exception types.
+    /// This method provides comprehensive error code support while maintaining backward compatibility
+    /// with existing error handling patterns.
     /// </summary>
     /// <param name="context">The HTTP context for the current request</param>
     /// <param name="exception">The exception that occurred</param>
-    /// <param name="userMessage">User-friendly error message from configuration to include in the response</param>
-    /// <param name="errors">List of specific error messages providing additional detail</param>
-    /// <param name="statusCode">HTTP status code to return based on exception type</param>
+    /// <param name="userMessage">User-friendly error message from configuration</param>
+    /// <param name="errors">List of specific error messages</param>
+    /// <param name="statusCode">HTTP status code to return</param>
     /// <param name="trackingData">Request tracking data for metadata generation</param>
     /// <param name="shouldLogAsError">Whether this exception should be logged as an error level</param>
     /// <returns>A task representing the asynchronous exception handling operation</returns>
     /// <remarks>
-    /// This method implements the core error response generation strategy, providing:
-    /// 1. Appropriate logging based on exception severity and expected nature
-    /// 2. Structured error responses with comprehensive metadata
-    /// 3. Consistent error message formatting using configured messages
-    /// 4. Robust error handling that prevents infinite exception loops
-    /// 5. HTTP status code mapping that follows REST API best practices
+    /// This enhanced method provides universal error code extraction that works with all
+    /// ApplicationExceptionBase-derived exceptions as well as system exceptions. The method
+    /// maintains backward compatibility while adding sophisticated error identification
+    /// capabilities that enable rich client-side error handling.
     /// 
-    /// The logging strategy differentiates between expected errors (validation, not found, etc.)
-    /// that are logged at information level and unexpected errors that are logged as errors.
-    /// This helps reduce noise in error logs while ensuring critical issues are properly captured.
+    /// **Universal Error Code Support**: The method automatically extracts error codes from
+    /// any exception that derives from ApplicationExceptionBase, ensuring consistent error
+    /// identification across all custom exception types without requiring specific handling code.
+    /// 
+    /// **Fallback Error Codes**: For system exceptions and exceptions without explicit codes,
+    /// the method provides appropriate fallback error codes based on exception type, ensuring
+    /// that all error responses include machine-readable error identification.
+    /// 
+    /// **Metadata Consistency**: All error responses include the same rich metadata structure
+    /// regardless of exception type, providing consistent debugging and monitoring capabilities
+    /// across the entire application.
     /// </remarks>
     private async Task HandleExceptionAsync(
         HttpContext context,
@@ -304,6 +467,15 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
         // Create the error response with metadata
         var errorResponse = ApiResponse<object>.ErrorResult(errors);
         errorResponse.Message = userMessage;
+        
+        // Extract and set error code from any exception type
+        var extractedErrorCode = ExtractErrorCode(exception);
+        if (!string.IsNullOrEmpty(extractedErrorCode))
+        {
+            errorResponse.StatusCode = extractedErrorCode;
+            _logger.LogDebug("Extracted error code '{ErrorCode}' from {ExceptionType}", 
+                extractedErrorCode, exception.GetType().Name);
+        }
 
         // Build and attach metadata if enabled
         errorResponse.Metadata = await BuildErrorMetadata(context, trackingData);
@@ -322,6 +494,81 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
             // This prevents infinite exception loops
             _logger.LogError(writeException, "Failed to write error response for request {RequestId}",
                 trackingData.RequestId);
+        }
+    }
+    
+    /// <summary>
+    /// Enhanced error code extraction that supports all ApplicationExceptionBase-derived exceptions
+    /// and provides appropriate fallback codes for system exceptions. This method enables universal
+    /// error code support across the entire exception hierarchy.
+    /// </summary>
+    /// <param name="exception">The exception to extract error code from</param>
+    /// <returns>The extracted error code, or a fallback code based on exception type</returns>
+    /// <remarks>
+    /// This enhanced extraction method provides comprehensive error code support that works with:
+    /// 
+    /// **Custom Application Exceptions**: All exceptions derived from ApplicationExceptionBase
+    /// automatically provide their configured error codes, enabling rich error identification
+    /// across the entire custom exception hierarchy.
+    /// 
+    /// **System Exception Mapping**: Common system exceptions are mapped to appropriate error
+    /// codes that provide meaningful identification for client-side error handling while
+    /// maintaining security by not exposing internal system details.
+    /// 
+    /// **Fallback Strategy**: The method implements a comprehensive fallback strategy that
+    /// ensures all exceptions result in some form of error code, preventing scenarios where
+    /// error responses lack machine-readable identification.
+    /// 
+    /// **Type-Safe Processing**: The method uses pattern matching and type checking to ensure
+    /// safe error code extraction that doesn't fail even with unexpected exception types
+    /// or malformed exception instances.
+    /// 
+    /// **Extensibility**: The extraction logic can be easily extended to support additional
+    /// exception types or custom error code mapping strategies without affecting existing
+    /// error handling behavior.
+    /// </remarks>
+    private string? ExtractErrorCode(Exception exception)
+    {
+        try
+        {
+            // First, check if it's one of our custom exceptions with error codes
+            if (exception is ApplicationExceptionBase appException && !string.IsNullOrEmpty(appException.Code))
+            {
+                return appException.Code;
+            }
+
+            // Provide fallback error codes for system exceptions and specific exception types
+            return exception switch
+            {
+                ValidationException => "VALIDATION_ERROR",
+                NotFoundException => "NOT_FOUND", 
+                ConflictException => "CONFLICT",
+                UnauthorizedException => "UNAUTHORIZED",
+                ForbiddenAccessException => "FORBIDDEN",
+                BadRequestException => "BAD_REQUEST",
+                BusinessException => "BUSINESS_RULE_VIOLATION",
+                Exceptions.TimeoutException => "TIMEOUT",
+                TooManyRequestsException => "TOO_MANY_REQUESTS",
+                ServiceUnavailableException => "SERVICE_UNAVAILABLE",
+                CustomHttpStatusException customEx => customEx.Code,
+                
+                // System exception mappings
+                UnauthorizedAccessException => "UNAUTHORIZED",
+                ArgumentException => "INVALID_ARGUMENT",
+                InvalidOperationException => "INVALID_OPERATION",
+                NotSupportedException => "NOT_SUPPORTED",
+                System.TimeoutException => "TIMEOUT",
+                ApplicationException => "APPLICATION_ERROR",
+                
+                // Generic fallback for any other exception
+                _ => "INTERNAL_ERROR"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to extract error code from exception {ExceptionType}", 
+                exception.GetType().Name);
+            return "INTERNAL_ERROR"; // Safe fallback
         }
     }
 
@@ -517,39 +764,27 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
     }
 
     /// <summary>
-    /// Creates a safe error message from an exception, preventing sensitive information leakage.
-    /// This method ensures that internal system details are not exposed to API consumers
-    /// while still providing meaningful error information.
+    /// Creates a safe error message from an exception, preventing sensitive information leakage
+    /// while providing meaningful error communication. This enhanced version provides more
+    /// comprehensive exception type mapping for better user experience.
     /// </summary>
     /// <param name="exception">The exception to create a safe message from</param>
     /// <returns>A safe error message appropriate for API response</returns>
     /// <remarks>
-    /// The safe message strategy prevents information disclosure vulnerabilities while maintaining
-    /// useful error communication. The method maps common exception types to user-friendly messages
-    /// that provide guidance without exposing system internals.
-    /// 
-    /// For production environments, this method serves as an additional security layer,
-    /// ensuring that unexpected exceptions don't leak sensitive information such as:
-    /// - Database connection strings or schema information
-    /// - File system paths or internal service details
-    /// - Stack traces or internal error codes
-    /// - Configuration values or environment variables
-    /// 
-    /// The mapping can be extended to handle application-specific exception types
-    /// while maintaining the principle of minimal information disclosure.
+    /// This enhanced safe message strategy provides more comprehensive exception mapping
+    /// while maintaining security principles that prevent information disclosure. The method
+    /// balances providing helpful error information with protecting sensitive system details.
     /// </remarks>
     private static string GetSafeErrorMessage(Exception exception)
     {
-        // For production environments, we might want to return generic messages
-        // to avoid exposing internal system details. This could be enhanced with
-        // environment-specific logic.
-
         return exception switch
         {
             ArgumentException => "Invalid request parameters",
             InvalidOperationException => "Operation cannot be completed at this time",
             NotSupportedException => "Requested operation is not supported",
-            TimeoutException => "Request timed out",
+            System.TimeoutException => "Request timed out",
+            UnauthorizedAccessException => "Access denied",
+            ApplicationException => "Application error occurred",
             _ => "An unexpected error occurred" // Generic message for unknown exceptions
         };
     }

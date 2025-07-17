@@ -207,6 +207,38 @@ public class ApiResponse<T>
     /// </remarks>
     public ResponseMetadata? Metadata { get; set; }
     
+    
+    /// <summary>
+    /// Gets or sets an application-specific status code that provides semantic meaning for complex workflows
+    /// and business processes that require client-side conditional handling. This property enables rich
+    /// client interactions by providing machine-readable status information beyond simple success/failure indicators.
+    /// </summary>
+    /// <value>
+    /// A string representing an application-specific status code, or null if no specific status applies.
+    /// This value can be automatically populated from response data that implements IHasStatusCode,
+    /// or set manually for specific response scenarios.
+    /// </value>
+    /// <remarks>
+    /// The StatusCode property addresses the common challenge of communicating complex application states
+    /// to API consumers in a way that enables sophisticated client-side logic and user experience flows.
+    /// Think of it as a semantic indicator that goes beyond the binary success/failure model to provide
+    /// nuanced information about operation outcomes and required next steps.
+    /// 
+    /// **Automatic Population**: When response data implements IHasStatusCode, the ResponseWrapper
+    /// system automatically extracts the status code and promotes it to this top-level property,
+    /// ensuring consistent availability to API consumers.
+    /// 
+    /// **Complex Workflow Support**: Modern applications often involve multi-step processes such as
+    /// authentication flows (2FA, email verification), approval workflows, or conditional business
+    /// operations. The StatusCode enables APIs to communicate precisely where users are in these
+    /// processes and what actions they need to take next.
+    /// 
+    /// **Client-Side Decision Making**: Rather than forcing clients to parse error messages or make
+    /// assumptions based on response data structure, the StatusCode provides a reliable, machine-readable
+    /// way for frontend applications to implement appropriate user experiences for different scenarios.
+    /// </remarks>
+    public string? StatusCode { get; set; }
+    
     /// <summary>
     /// Creates a successful API response with the specified data and optional message.
     /// This factory method provides a convenient way to construct positive responses
@@ -239,13 +271,14 @@ public class ApiResponse<T>
     /// ResponseWrapper system, which will automatically add timing, correlation, and other
     /// diagnostic information based on configuration settings.
     /// </remarks>
-    public static ApiResponse<T> SuccessResult(T data, string? message = null)
+    public static ApiResponse<T> SuccessResult(T data, string? message = null, string? statusCode = null)
     {
         return new ApiResponse<T>
         {
             Success = true,
             Data = data,
-            Message = message
+            Message = message,
+            StatusCode = statusCode
         };
     }
     
