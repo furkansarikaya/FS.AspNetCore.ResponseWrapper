@@ -7,16 +7,17 @@
 
 **Automatic API response wrapping with metadata injection for ASP.NET Core applications.**
 
-FS.AspNetCore.ResponseWrapper provides a consistent, standardized response format for your ASP.NET Core APIs with zero boilerplate code. Transform your raw controller responses into rich, metadata-enhanced API responses that include execution timing, pagination details, correlation IDs, and comprehensive error handling.
+FS.AspNetCore.ResponseWrapper provides a consistent, standardized response format for your ASP.NET Core APIs with zero boilerplate code. Transform your raw controller responses into rich, metadata-enhanced API responses that include execution timing, pagination details, correlation IDs, status codes, and comprehensive error handling.
 
 ## 🎯 Why ResponseWrapper?
 
-Building robust APIs means handling consistent response formats, error management, timing information, and pagination metadata. Without a standardized approach, you end up with:
+Building robust APIs means handling consistent response formats, error management, timing information, status codes, and pagination metadata. Without a standardized approach, you end up with:
 
 - **Inconsistent Response Formats**: Different endpoints returning data in different structures
 - **Manual Error Handling**: Writing repetitive error response logic in every controller
 - **Missing Metadata**: No execution timing, correlation IDs, or request tracking
 - **Complex Pagination**: Mixing business data with pagination information
+- **Status Code Confusion**: Mixing HTTP status codes with application-specific workflow states
 - **Debugging Difficulties**: Limited insight into request processing and performance
 
 ResponseWrapper solves all these challenges by automatically wrapping your API responses with a consistent structure, comprehensive metadata, and intelligent error handling.
@@ -31,6 +32,9 @@ Built-in execution time tracking and database query statistics for performance o
 
 ### 🔍 Request Tracing
 Automatic correlation ID generation and tracking for distributed systems debugging.
+
+### 📊 Application Status Codes
+Intelligent status code extraction and promotion from response data, enabling complex workflow management and rich client-side conditional logic.
 
 ### 📄 Smart Pagination
 Automatic detection and clean separation of pagination metadata from business data using duck typing.
@@ -61,7 +65,7 @@ Install-Package FS.AspNetCore.ResponseWrapper
 Or add directly to your `.csproj` file:
 
 ```xml
-<PackageReference Include="FS.AspNetCore.ResponseWrapper" Version="9.0.0" />
+<PackageReference Include="FS.AspNetCore.ResponseWrapper" Version="9.1.0" />
 ```
 
 ## 🚀 Quick Start
@@ -148,6 +152,7 @@ public class UsersController : ControllerBase
     {"id": 2, "name": "Jane Smith", "email": "jane@example.com"}
   ],
   "message": null,
+  "statusCode": null,
   "errors": [],
   "metadata": {
     "requestId": "550e8400-e29b-41d4-a716-446655440000",
@@ -267,6 +272,7 @@ throw new ForbiddenAccessException("Access denied to this resource");
   "success": false,
   "data": null,
   "message": "Please check your input and try again",
+  "statusCode": "VALIDATION_ERROR",
   "errors": [
     "Email is required",
     "Password must be at least 8 characters"
@@ -287,6 +293,7 @@ throw new ForbiddenAccessException("Access denied to this resource");
   "success": false,
   "data": null,
   "message": "The requested item could not be found",
+  "statusCode": "NOT_FOUND",
   "errors": ["User (123) was not found."],
   "metadata": {
     "requestId": "550e8400-e29b-41d4-a716-446655440001",
@@ -316,6 +323,131 @@ if (environment.IsDevelopment())
 {
     errorMessages.ValidationErrorMessage = "Validation failed - check detailed errors";
     errorMessages.ApplicationErrorMessage = "Application error - check logs for stack trace";
+}
+```
+
+## 📊 Application Status Codes
+
+One of ResponseWrapper's powerful features is its intelligent application status code handling, which enables complex workflow management beyond simple success/failure indicators.
+
+### The Problem with HTTP Status Codes Alone
+
+HTTP status codes are great for transport-level communication, but modern applications often need richer status information:
+
+```json
+{
+  "success": true,
+  "data": {"userId": 123, "email": "user@example.com"},
+  "statusCode": "EMAIL_VERIFICATION_REQUIRED",
+  "message": "Account created successfully. Please verify your email."
+}
+```
+
+This enables sophisticated client-side logic based on application state rather than just HTTP semantics.
+
+### Automatic Status Code Extraction
+
+ResponseWrapper automatically extracts status codes from your response data when they implement the `IHasStatusCode` interface:
+
+```csharp
+// Your response DTO
+public class UserRegistrationResult : IHasStatusCode
+{
+    public int UserId { get; set; }
+    public string Email { get; set; }
+    public string StatusCode { get; set; } = "EMAIL_VERIFICATION_REQUIRED";
+    public string Message { get; set; } = "Please verify your email to complete registration";
+}
+
+// Your controller
+[HttpPost("register")]
+public async Task<UserRegistrationResult> RegisterUser(RegisterRequest request)
+{
+    var result = await _userService.RegisterAsync(request);
+    return result; // StatusCode is automatically promoted to ApiResponse level
+}
+```
+
+**Resulting Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "userId": 123,
+    "email": "user@example.com"
+  },
+  "statusCode": "EMAIL_VERIFICATION_REQUIRED",
+  "message": "Please verify your email to complete registration",
+  "metadata": { ... }
+}
+```
+
+Notice how the status code and message are promoted to the top-level ApiResponse while the data remains clean and focused on business information.
+
+### Complex Workflow Examples
+
+```csharp
+// Authentication workflow
+public class LoginResult : IHasStatusCode
+{
+    public string Token { get; set; }
+    public UserProfile User { get; set; }
+    public string StatusCode { get; set; }
+    public string Message { get; set; }
+}
+
+// Different status codes for different scenarios
+switch (authResult.Status)
+{
+    case AuthStatus.Success:
+        return new LoginResult 
+        { 
+            Token = token, 
+            User = user, 
+            StatusCode = "LOGIN_SUCCESS",
+            Message = "Welcome back!"
+        };
+    
+    case AuthStatus.RequiresTwoFactor:
+        return new LoginResult 
+        { 
+            StatusCode = "TWO_FACTOR_REQUIRED",
+            Message = "Please enter your authentication code"
+        };
+    
+    case AuthStatus.PasswordExpired:
+        return new LoginResult 
+        { 
+            StatusCode = "PASSWORD_EXPIRED",
+            Message = "Your password has expired. Please update it."
+        };
+}
+```
+
+### Client-Side Usage
+
+The status codes enable sophisticated client-side logic:
+
+```typescript
+const response = await api.post('/auth/login', credentials);
+
+if (response.success) {
+    switch (response.statusCode) {
+        case 'LOGIN_SUCCESS':
+            router.push('/dashboard');
+            break;
+        case 'TWO_FACTOR_REQUIRED':
+            showTwoFactorDialog();
+            break;
+        case 'PASSWORD_EXPIRED':
+            router.push('/change-password');
+            break;
+        case 'EMAIL_VERIFICATION_REQUIRED':
+            showEmailVerificationPrompt();
+            break;
+    }
+} else {
+    handleErrors(response.errors);
 }
 ```
 
@@ -453,9 +585,9 @@ public class ProductsController : ControllerBase
         return await _productService.GetPagedProductsAsync(page, pageSize);
     }
 
-    // Product creation - automatically wrapped with 201 status
+    // Product creation with status codes - automatically wrapped with 201 status
     [HttpPost]
-    public async Task<Product> CreateProduct(CreateProductRequest request)
+    public async Task<ProductCreationResult> CreateProduct(CreateProductRequest request)
     {
         // Validation happens automatically via ValidationException
         if (!ModelState.IsValid)
@@ -500,9 +632,17 @@ public class ProductsController : ControllerBase
 }
 ```
 
-### User Management with Custom Business Logic
+### User Management with Complex Workflows
 
 ```csharp
+// Response DTO with status codes
+public class UserActivationResult : IHasStatusCode
+{
+    public User User { get; set; }
+    public string StatusCode { get; set; }
+    public string Message { get; set; }
+}
+
 [ApiController]
 [Route("api/[controller]")]
 public class UsersController : ControllerBase
@@ -515,7 +655,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("{id}/activate")]
-    public async Task<User> ActivateUser(int id)
+    public async Task<UserActivationResult> ActivateUser(int id)
     {
         var user = await _userService.GetUserByIdAsync(id);
         if (user == null)
@@ -523,12 +663,31 @@ public class UsersController : ControllerBase
 
         // Business rule validation
         if (user.IsActive)
-            throw new BusinessException("User is already active");
+        {
+            return new UserActivationResult 
+            { 
+                User = user,
+                StatusCode = "ALREADY_ACTIVE",
+                Message = "User is already active"
+            };
+        }
 
         if (user.IsSuspended)
-            throw new BusinessException("Cannot activate suspended user");
+        {
+            return new UserActivationResult 
+            { 
+                StatusCode = "ACCOUNT_SUSPENDED",
+                Message = "Cannot activate suspended user. Please contact support."
+            };
+        }
 
-        return await _userService.ActivateUserAsync(id);
+        var activatedUser = await _userService.ActivateUserAsync(id);
+        return new UserActivationResult 
+        { 
+            User = activatedUser,
+            StatusCode = "ACTIVATION_SUCCESS",
+            Message = "User activated successfully"
+        };
     }
 
     [HttpDelete("{id}")]
@@ -709,7 +868,31 @@ if (!User.IsInRole("Admin"))
 // throw new Exception("Something went wrong");
 ```
 
-### 3. Leverage Custom Error Messages
+### 3. Leverage Application Status Codes
+
+```csharp
+// Good: Rich status information
+public class PaymentResult : IHasStatusCode
+{
+    public string TransactionId { get; set; }
+    public decimal Amount { get; set; }
+    public string StatusCode { get; set; }
+    public string Message { get; set; }
+}
+
+// Different status codes for different outcomes
+switch (paymentResponse.Status)
+{
+    case PaymentStatus.Success:
+        return new PaymentResult { StatusCode = "PAYMENT_SUCCESS", ... };
+    case PaymentStatus.InsufficientFunds:
+        return new PaymentResult { StatusCode = "INSUFFICIENT_FUNDS", ... };
+    case PaymentStatus.CardExpired:
+        return new PaymentResult { StatusCode = "CARD_EXPIRED", ... };
+}
+```
+
+### 4. Leverage Custom Error Messages
 
 ```csharp
 // Customize messages for better UX
@@ -718,7 +901,7 @@ errorMessages.NotFoundErrorMessage = "We couldn't find what you're looking for";
 errorMessages.UnauthorizedAccessMessage = "Please sign in to continue";
 ```
 
-### 4. Exclude Appropriate Endpoints
+### 5. Exclude Appropriate Endpoints
 
 ```csharp
 options.ExcludedPaths = new[]
@@ -731,7 +914,7 @@ options.ExcludedPaths = new[]
 };
 ```
 
-### 5. Monitor Performance Impact
+### 6. Monitor Performance Impact
 
 ```csharp
 // Enable detailed monitoring in development
@@ -794,7 +977,22 @@ public class MyPagedResult<T>
 }
 ```
 
-#### 3. Error Messages Not Showing
+#### 3. Status Codes Not Being Extracted
+
+**Problem**: Application status codes are not appearing in responses.
+
+**Solution**: Implement the `IHasStatusCode` interface on your response DTOs:
+
+```csharp
+public class MyResponse : IHasStatusCode
+{
+    public string Data { get; set; }
+    public string StatusCode { get; set; } // This will be promoted to ApiResponse level
+    public string Message { get; set; }    // This will also be promoted
+}
+```
+
+#### 4. Error Messages Not Showing
 
 **Problem**: Custom error messages are not displayed.
 
@@ -815,7 +1013,7 @@ app.UseAuthorization();
 app.MapControllers();
 ```
 
-#### 4. Performance Issues
+#### 5. Performance Issues
 
 **Problem**: API responses are slower after adding ResponseWrapper.
 
@@ -824,7 +1022,7 @@ app.MapControllers();
 - Exclude high-frequency endpoints: `options.ExcludedPaths = new[] { "/api/high-frequency" }`
 - Disable execution time tracking for production: `options.EnableExecutionTimeTracking = false`
 
-#### 5. File Downloads Being Wrapped
+#### 6. File Downloads Being Wrapped
 
 **Problem**: File download endpoints are returning JSON instead of files.
 
@@ -913,4 +1111,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Made with ❤️ by [Furkan Sarıkaya](https://github.com/furkansarikaya)**
 
-*Transform your ASP.NET Core APIs with consistent, metadata-rich responses. Install FS.AspNetCore.ResponseWrapper today and experience the difference!*
+*Transform your ASP.NET Core APIs with consistent, metadata-rich responses and intelligent status code management. Install FS.AspNetCore.ResponseWrapper today and experience the difference!*

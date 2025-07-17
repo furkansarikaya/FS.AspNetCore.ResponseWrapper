@@ -10,16 +10,16 @@
 
         <!-- Package Information -->
         <PackageId>FS.AspNetCore.ResponseWrapper</PackageId>
-        <Version>9.0.0</Version>
+        <Version>9.1.0</Version>
         <Authors>Furkan SARIKAYA</Authors>
         <Company>Furkan SARIKAYA</Company>
         <Product>FS.AspNetCore.ResponseWrapper</Product>
-        <Description>Automatic API response wrapping with metadata injection for ASP.NET Core applications. Provides consistent response format, execution time tracking, pagination metadata extraction, and query statistics through a simple action filter.</Description>
+        <Description>A comprehensive ASP.NET Core response wrapper that transforms your APIs into enterprise-grade endpoints with zero code changes. Automatically wraps controller responses in a consistent format with rich metadata including execution timing, correlation IDs, request tracking, and comprehensive error handling. Features intelligent application status code extraction and promotion for complex workflow management, automatic pagination metadata separation using duck typing (works with ANY pagination library), database query statistics integration, and extensive configuration options. Includes built-in exception types for common scenarios (ValidationException, NotFoundException, BusinessException, etc.), customizable error messages for localization, global exception handling middleware, and smart exclusion capabilities for specific endpoints or result types. Perfect for microservices, complex business workflows, and APIs requiring consistent client-side error handling. Supports .NET 9.0+ with minimal performance overhead and extensive debugging capabilities.</Description>
         <Copyright>Copyright © 2025 Furkan SARIKAYA</Copyright>
 
         <!-- Package Metadata -->
-        <PackageTags>aspnetcore;api;response;wrapper;metadata;filter;middleware;automation;json;rest</PackageTags>
-        <PackageReleaseNotes>Initial release with core response wrapping functionality, execution time tracking, and metadata injection.</PackageReleaseNotes>
+        <PackageTags>aspnetcore;api;response;wrapper;metadata;filter;middleware;automation;json;rest;status-codes;pagination;error-handling</PackageTags>
+        <PackageReleaseNotes>Version 9.1.0: Added intelligent application status code extraction and promotion feature. ResponseWrapper now automatically detects and promotes status codes from response data that implements IHasStatusCode interface, enabling complex workflow management and rich client-side conditional logic. Enhanced error handling with automatic error code extraction from all exception types.</PackageReleaseNotes>
         <PackageProjectUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</PackageProjectUrl>
         <RepositoryUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
