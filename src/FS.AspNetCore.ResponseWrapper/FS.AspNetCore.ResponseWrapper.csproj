@@ -10,7 +10,7 @@
 
         <!-- Package Information -->
         <PackageId>FS.AspNetCore.ResponseWrapper</PackageId>
-        <Version>9.1.0</Version>
+        <Version>9.2.0</Version>
         <Authors>Furkan SARIKAYA</Authors>
         <Company>Furkan SARIKAYA</Company>
         <Product>FS.AspNetCore.ResponseWrapper</Product>
@@ -19,7 +19,7 @@
 
         <!-- Package Metadata -->
         <PackageTags>aspnetcore;api;response;wrapper;metadata;filter;middleware;automation;json;rest;status-codes;pagination;error-handling</PackageTags>
-        <PackageReleaseNotes>Version 9.1.0: Added intelligent application status code extraction and promotion feature. ResponseWrapper now automatically detects and promotes status codes from response data that implements IHasStatusCode interface, enabling complex workflow management and rich client-side conditional logic. Enhanced error handling with automatic error code extraction from all exception types.</PackageReleaseNotes>
+        <PackageReleaseNotes>Version 9.2.0: Added intelligent application status code extraction and promotion feature. ResponseWrapper now automatically detects and promotes status codes from response data that implements IHasStatusCode interface, enabling complex workflow management and rich client-side conditional logic. Enhanced error handling with automatic error code extraction from all exception types.</PackageReleaseNotes>
         <PackageProjectUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</PackageProjectUrl>
         <RepositoryUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
