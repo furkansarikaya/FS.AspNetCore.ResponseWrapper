@@ -60,17 +60,26 @@ public class WeatherForecastController(ILogger<WeatherForecastController> logger
                 throw new NotFoundException(nameof(Get), 19);
             default:
             {
+                var items = Enumerable.Range(1, 5).Select(index => new WeatherForecast
+                    {
+                        Date = DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
+                        TemperatureC = Random.Shared.Next(-20, 55),
+                        Summary = Summaries[Random.Shared.Next(Summaries.Length)]
+                    })
+                    .ToList();
                 WeatherForecastResponse response = new()
                 {
-                    Items = Enumerable.Range(1, 5).Select(index => new WeatherForecast
-                        {
-                            Date = DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                            TemperatureC = Random.Shared.Next(-20, 55),
-                            Summary = Summaries[Random.Shared.Next(Summaries.Length)]
-                        })
-                        .ToList(),
+                    Items = items,
                     StatusCode = "Success",
-                    Message = "Success message"
+                    Message = "Success message",
+                    Metadata = new Dictionary<string, object>
+                    {
+                        { "verificationType", "2fa" },
+                        { "canResend", true },
+                        { "resendCooldown", 30 },
+                        { "attemptsRemaining", 3 },
+                        { "expiresIn", 300 }
+                    }
                 };
                 return Ok(response);
             }

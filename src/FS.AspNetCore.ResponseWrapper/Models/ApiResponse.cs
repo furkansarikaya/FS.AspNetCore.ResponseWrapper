@@ -238,7 +238,7 @@ public class ApiResponse<T>
     /// way for frontend applications to implement appropriate user experiences for different scenarios.
     /// </remarks>
     public string? StatusCode { get; set; }
-    
+
     /// <summary>
     /// Creates a successful API response with the specified data and optional message.
     /// This factory method provides a convenient way to construct positive responses
@@ -246,6 +246,7 @@ public class ApiResponse<T>
     /// </summary>
     /// <param name="data">The response data to include in the successful response.</param>
     /// <param name="message">Optional message describing the successful operation.</param>
+    /// <param name="statusCode">Optional status code to provide semantic meaning for complex workflows.</param>
     /// <returns>A new ApiResponse instance configured for success with the provided data and message.</returns>
     /// <remarks>
     /// This factory method embodies the "pit of success" design principle, making it easy to create

@@ -230,12 +230,12 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
 
     /// <summary>
     /// Builds comprehensive response metadata from request context and tracking data.
-    /// This method orchestrates the collection of all metadata components based on configuration.
+    /// This method now handles ALL metadata extraction in one place to avoid duplication.
     /// </summary>
     /// <param name="context">The action executed context</param>
     /// <param name="trackingData">Request tracking data</param>
     /// <param name="originalData">The original response data for analysis</param>
-    /// <returns>A task containing the complete response metadata</returns>
+    /// <returns>A task containing the complete response metadata with merged custom metadata</returns>
     private Task<ResponseMetadata> BuildResponseMetadata(
         ActionExecutedContext context,
         RequestTrackingData trackingData,
@@ -274,10 +274,161 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
             metadata.Query = ExtractQueryMetadata(httpContext);
         }
 
-        // Always extract additional metadata (it's lightweight and generally useful)
-        metadata.Additional = ExtractAdditionalMetadata(httpContext);
+        // Extract system-generated additional metadata
+        var systemAdditionalMetadata = ExtractAdditionalMetadata(httpContext);
+
+        // Extract custom metadata from response object (ONLY HERE!)
+        var customMetadata = ExtractCustomMetadata(originalData);
+
+        // Merge system and custom metadata (ONLY ONCE!)
+        metadata.Additional = MergeMetadataDictionaries(systemAdditionalMetadata, customMetadata);
 
         return Task.FromResult(metadata);
+    }
+
+    /// <summary>
+    /// Extracts custom metadata from response objects that implement IHasMetadata interface.
+    /// This method provides automatic custom metadata extraction while maintaining type safety
+    /// and error resilience.
+    /// </summary>
+    /// <param name="data">The response data to analyze for custom metadata</param>
+    /// <returns>Dictionary of custom metadata if available; otherwise, null</returns>
+    /// <remarks>
+    /// This method implements the same pattern as status code extraction, providing automatic
+    /// detection and extraction of custom metadata from response objects. The extraction process:
+    /// 
+    /// 1. **Interface Detection**: Checks if the response object implements IHasMetadata
+    /// 2. **Safe Extraction**: Uses defensive programming to handle potential null values or exceptions
+    /// 3. **Logging**: Provides appropriate debug logging for troubleshooting and monitoring
+    /// 4. **Error Resilience**: Ensures that metadata extraction failures don't break response processing
+    /// 
+    /// **Custom Metadata Benefits**: Enables applications to include business-specific metadata
+    /// such as workflow states, feature flags, permission contexts, or any other information
+    /// that clients need for enhanced user experiences or decision-making logic.
+    /// 
+    /// **Performance Considerations**: The extraction process is designed to be lightweight,
+    /// using simple interface checks and direct property access to minimize performance impact.
+    /// </remarks>
+    private Dictionary<string, object>? ExtractCustomMetadata(object data)
+    {
+        if (data == null)
+            return null;
+
+        try
+        {
+            // Check if the response object provides custom metadata
+            if (data is not IHasMetadata metadataProvider) return null;
+            var customMetadata = metadataProvider.Metadata;
+
+            if (customMetadata != null && customMetadata.Count > 0)
+            {
+                _logger.LogDebug("Extracted {MetadataCount} custom metadata entries from {DataType}",
+                    customMetadata.Count, data.GetType().Name);
+
+                // Log the metadata keys for debugging (but not values for security)
+                _logger.LogTrace("Custom metadata keys: {MetadataKeys}",
+                    string.Join(", ", customMetadata.Keys));
+
+                return new Dictionary<string, object>(customMetadata);
+            }
+
+            _logger.LogTrace("Response object {DataType} implements IHasMetadata but provided no custom metadata",
+                data.GetType().Name);
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to extract custom metadata from {DataType}. " +
+                                   "Error: {ErrorMessage}. Continuing without custom metadata",
+                data.GetType().Name, ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Merges system-generated additional metadata with custom metadata from response objects,
+    /// handling potential conflicts and ensuring proper metadata organization.
+    /// </summary>
+    /// <param name="systemMetadata">System-generated additional metadata (clientIP, userAgent, etc.)</param>
+    /// <param name="customMetadata">Custom metadata from response objects implementing IHasMetadata</param>
+    /// <returns>Combined metadata dictionary, or null if both inputs are null or empty</returns>
+    /// <remarks>
+    /// This method implements a sophisticated merging strategy that handles conflicts between
+    /// system and custom metadata while preserving both types of information:
+    /// 
+    /// **Conflict Resolution**: When both system and custom metadata contain the same key,
+    /// the method uses a prefixing strategy to preserve both values rather than overwriting.
+    /// Custom metadata gets priority for the original key name, while system metadata is
+    /// prefixed with "system_".
+    /// 
+    /// **Namespace Separation**: The merging process maintains clear separation between
+    /// different types of metadata while presenting them in a unified structure that's
+    /// convenient for client consumption.
+    /// 
+    /// **Null Safety**: Handles all combinations of null/empty inputs gracefully, ensuring
+    /// that the method never fails due to null reference exceptions.
+    /// 
+    /// **Performance Optimization**: Uses efficient dictionary operations and avoids
+    /// unnecessary allocations when one or both inputs are empty.
+    /// </remarks>
+    private Dictionary<string, object>? MergeMetadataDictionaries(
+        Dictionary<string, object>? systemMetadata,
+        Dictionary<string, object>? customMetadata)
+    {
+        // If both are null or empty, return null
+        if ((systemMetadata == null || systemMetadata.Count == 0) &&
+            (customMetadata == null || customMetadata.Count == 0))
+        {
+            return null;
+        }
+
+        // If only one has data, return a copy of it
+        if (systemMetadata == null || systemMetadata.Count == 0)
+        {
+            return customMetadata != null ? new Dictionary<string, object>(customMetadata) : null;
+        }
+
+        if (customMetadata == null || customMetadata.Count == 0)
+        {
+            return new Dictionary<string, object>(systemMetadata);
+        }
+
+        // Both have data - merge them with conflict resolution
+        var mergedMetadata = new Dictionary<string, object>(systemMetadata);
+        var conflictCount = 0;
+
+        foreach (var customEntry in customMetadata)
+        {
+            if (mergedMetadata.TryGetValue(customEntry.Key, out var systemValue))
+            {
+                // Handle conflict: preserve both values with different keys
+                conflictCount++;
+                mergedMetadata[$"system_{customEntry.Key}"] = systemValue;
+
+                // Give custom metadata priority for the original key
+                mergedMetadata[customEntry.Key] = customEntry.Value;
+
+                _logger.LogDebug($"Metadata key conflict resolved: '{customEntry.Key}' - custom value kept, " +
+                                 "system value moved to 'system_{customEntry.Key}'");
+            }
+            else
+            {
+                // No conflict - add custom metadata directly
+                mergedMetadata[customEntry.Key] = customEntry.Value;
+            }
+        }
+
+        if (conflictCount > 0)
+        {
+            _logger.LogInformation("Resolved {ConflictCount} metadata key conflicts during merge", conflictCount);
+        }
+
+        _logger.LogDebug("Successfully merged system metadata ({SystemCount} entries) with " +
+                         "custom metadata ({CustomCount} entries) into {TotalCount} total entries",
+            systemMetadata.Count, customMetadata.Count, mergedMetadata.Count);
+
+        return mergedMetadata;
     }
 
     /// <summary>
@@ -466,36 +617,41 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
     }
 
     /// <summary>
-    /// Creates the final wrapped response with automatic status code extraction and clean data transformation.
-    /// This method extracts status codes from response data and promotes them to the ApiResponse level
-    /// while creating clean, metadata-free data structures for the response body.
+    /// Updated CreateWrappedResponse method that no longer duplicates custom metadata extraction.
+    /// Custom metadata is now handled exclusively in BuildResponseMetadata.
     /// </summary>
     /// <param name="originalData">The original response data from the controller</param>
-    /// <param name="metadata">The metadata to include in the response</param>
-    /// <returns>The wrapped response object with extracted status code and clean data</returns>
+    /// <param name="metadata">The COMPLETE metadata (already includes custom metadata)</param>
+    /// <returns>The wrapped response object with extracted status/message and clean data</returns>
     /// <remarks>
-    /// This enhanced method provides clean separation of concerns by:
-    /// 1. Extracting status codes and messages from response DTOs
-    /// 2. Creating clean data structures without metadata properties
-    /// 3. Promoting status information to the ApiResponse level for consistent access
-    /// 4. Maintaining backward compatibility for responses without status codes
+    /// This updated method fixes the duplication issue by removing the redundant custom
+    /// metadata extraction that was causing duplicate entries with system_ prefixes.
     /// 
-    /// The clean data approach ensures that business data remains focused on its primary purpose
-    /// while status and metadata information is properly organized at the response wrapper level.
+    /// **No Duplicate Extraction**: Custom metadata is no longer extracted here since
+    /// it's already been processed and merged in BuildResponseMetadata.
+    /// 
+    /// **Simpler Logic**: The method now focuses solely on status code/message extraction
+    /// and clean data structure creation, making it more maintainable.
+    /// 
+    /// **Complete Metadata**: The metadata parameter already contains the complete
+    /// metadata structure including merged custom metadata, so no additional merging
+    /// is needed.
     /// </remarks>
     private object CreateWrappedResponse(object originalData, ResponseMetadata metadata)
     {
         var dataType = originalData.GetType();
 
-        // Extract status code and message BEFORE transformation
+        // Extract ONLY StatusCode and Message (custom metadata already handled!)
         var (extractedStatusCode, extractedMessage) = ExtractStatusCodeAndMessage(originalData);
 
         // Transform paginated results (existing logic)
         var (transformedData, transformedDataType) = TransformPagedResult(originalData, dataType);
 
-        // Create clean data structure by removing status code properties
+        // Create clean data structure by removing ALL metadata properties
         var cleanData = CreateCleanDataStructure(transformedData, transformedDataType);
         var cleanDataType = cleanData.GetType();
+
+        // NO MORE CUSTOM METADATA MERGING HERE - it's already done!
 
         var responseType = typeof(ApiResponse<>).MakeGenericType(cleanDataType);
         var response = Activator.CreateInstance(responseType);
@@ -514,7 +670,7 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
 
         dataProperty?.SetValue(response, cleanData);
         successProperty?.SetValue(response, true);
-        metadataProperty?.SetValue(response, metadata);
+        metadataProperty?.SetValue(response, metadata); // Complete metadata!
 
         // Set extracted status code at ApiResponse level
         if (!string.IsNullOrEmpty(extractedStatusCode))
@@ -523,14 +679,14 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
             _logger.LogDebug("Promoted status code '{StatusCode}' to ApiResponse level", extractedStatusCode);
         }
 
-        // Set extracted message if available
+        // Set extracted message at ApiResponse level
         if (!string.IsNullOrEmpty(extractedMessage))
         {
             messageProperty?.SetValue(response, extractedMessage);
             _logger.LogDebug("Promoted message to ApiResponse level");
         }
 
-        _logger.LogDebug("Successfully created clean ApiResponse<{CleanDataType}> with promoted metadata",
+        _logger.LogDebug("Successfully created clean ApiResponse<{CleanDataType}> without duplicate metadata",
             cleanDataType.Name);
 
         return response;
@@ -724,7 +880,9 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
         // Properties that should be excluded from clean business data
         var excludedProperties = new[]
         {
-            "StatusCode", "Message"
+            "StatusCode", // From IHasStatusCode interface
+            "Message", // From IHasMessage interface  
+            "Metadata" // From IHasMetadata interface
         };
 
         var isExcluded = excludedProperties.Contains(propertyName, StringComparer.OrdinalIgnoreCase);
@@ -1133,74 +1291,86 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
     }
 
     /// <summary>
-    /// Extracts status code and message from response data that implements IHasStatusCode interface.
-    /// This method provides automatic promotion of status information from response DTOs to the
-    /// top-level ApiResponse structure, enabling consistent client-side status handling.
+    /// Enhanced extraction method that handles StatusCode and Message but NOT custom metadata.
+    /// Custom metadata is handled separately in BuildResponseMetadata to avoid duplication.
     /// </summary>
-    /// <param name="data">The response data to analyze for status code and message information</param>
-    /// <returns>A tuple containing the extracted status code and message, or null values if not available</returns>
+    /// <param name="data">The response data to analyze for status code and message</param>
+    /// <returns>A tuple containing extracted status code and message (NO custom metadata)</returns>
     /// <remarks>
-    /// This method implements the Interface Segregation Principle by checking for specific
-    /// interfaces that indicate the presence of status information. The extraction process
-    /// is designed to be non-intrusive and fail-safe - if the data doesn't implement the
-    /// expected interfaces, the method simply returns null values without affecting the
-    /// overall response processing.
+    /// This method is now focused solely on StatusCode and Message extraction to avoid
+    /// the duplication issue where custom metadata was being extracted and merged twice.
     /// 
-    /// **Status Code Extraction**: The method first checks if the data implements IHasStatusCode
-    /// and extracts the status code if available. This enables automatic promotion of workflow
-    /// states and business process indicators to the API response level.
+    /// **Single Responsibility**: This method now has a single, clear responsibility:
+    /// extract StatusCode and Message for promotion to ApiResponse level properties.
     /// 
-    /// **Message Extraction**: The method also attempts to extract message information using
-    /// reflection to look for common message property names. This provides additional context
-    /// that can complement the status code information.
+    /// **No Duplication**: Custom metadata extraction is handled exclusively in
+    /// BuildResponseMetadata, ensuring it's only processed once per request.
     /// 
-    /// **Error Handling**: All reflection operations are wrapped in try-catch blocks to ensure
-    /// that extraction failures don't break the overall response processing. If extraction fails,
-    /// the method logs the issue and continues with null values.
-    /// 
-    /// **Performance Considerations**: The method uses cached reflection where possible and
-    /// includes early exit strategies to minimize performance impact on responses that don't
-    /// provide status information.
+    /// **Clean Separation**: This separation makes the code more maintainable and
+    /// eliminates the complex conflict resolution that was causing duplicate entries.
     /// </remarks>
     private (string? statusCode, string? message) ExtractStatusCodeAndMessage(object data)
     {
-        if (data == null) return (null, null);
+        if (data == null)
+            return (null, null);
 
         try
         {
             string? statusCode = null;
             string? message = null;
 
-            // Extract status code from IHasStatusCode implementation
+            // Extract StatusCode using interface-first approach
             if (data is IHasStatusCode statusProvider)
             {
                 statusCode = statusProvider.StatusCode;
+                _logger.LogTrace("Extracted StatusCode '{StatusCode}' from IHasStatusCode interface", statusCode);
             }
             else
             {
-                // Try to extract using reflection for objects that don't implement IHasStatusCode
-                var dataType = data.GetType();
-                var statusCodeProperty = dataType.GetProperty("StatusCode", BindingFlags.Public | BindingFlags.Instance);
-
+                // Reflection fallback for backward compatibility
+                var statusCodeProperty = data.GetType().GetProperty("StatusCode", BindingFlags.Public | BindingFlags.Instance);
                 if (statusCodeProperty?.PropertyType == typeof(string) && statusCodeProperty.CanRead)
                 {
                     statusCode = statusCodeProperty.GetValue(data) as string;
+                    _logger.LogTrace("Extracted StatusCode '{StatusCode}' via reflection fallback", statusCode);
                 }
             }
 
-            // Extract message property if available
-            var messageProperty = data.GetType().GetProperty("Message", BindingFlags.Public | BindingFlags.Instance);
-
-            if (messageProperty?.PropertyType == typeof(string) && messageProperty.CanRead)
+            // Extract Message using interface-first approach
+            if (data is IHasMessage messageProvider)
             {
-                message = messageProperty.GetValue(data) as string;
+                message = messageProvider.Message;
+                _logger.LogTrace("Extracted Message from IHasMessage interface");
+            }
+            else
+            {
+                // Reflection fallback for backward compatibility
+                var messageProperty = data.GetType().GetProperty("Message", BindingFlags.Public | BindingFlags.Instance);
+                if (messageProperty?.PropertyType == typeof(string) && messageProperty.CanRead)
+                {
+                    message = messageProperty.GetValue(data) as string;
+                    _logger.LogTrace("Extracted Message via reflection fallback");
+                }
+            }
+
+            // Log extraction summary
+            var extractedTypes = new List<string>();
+            if (!string.IsNullOrEmpty(statusCode)) extractedTypes.Add("StatusCode");
+            if (!string.IsNullOrEmpty(message)) extractedTypes.Add("Message");
+
+            if (extractedTypes.Count > 0)
+            {
+                _logger.LogDebug("Successfully extracted: {ExtractedTypes} from {DataType}",
+                    string.Join(", ", extractedTypes), data.GetType().Name);
             }
 
             return (statusCode, message);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to extract status code from {DataType}", data.GetType().Name);
+            _logger.LogWarning(ex, "Failed to extract status code and message from {DataType}. " +
+                                   "Error: {ErrorMessage}. Continuing without extraction",
+                data.GetType().Name, ex.Message);
             return (null, null);
         }
     }

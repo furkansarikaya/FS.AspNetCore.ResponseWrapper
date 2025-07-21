@@ -13,9 +13,10 @@ public class WeatherForecast
     public string? Summary { get; set; }
 }
 
-public class WeatherForecastResponse : IHasStatusCode
+public class WeatherForecastResponse : IHasStatusCode, IHasMessage, IHasMetadata
 {
     public List<WeatherForecast> Items { get; set; } = [];
     public string? StatusCode { get; set; } = "";
     public string? Message { get; set; } = "";
+    public Dictionary<string, object>? Metadata { get; set; } = new();
 }
