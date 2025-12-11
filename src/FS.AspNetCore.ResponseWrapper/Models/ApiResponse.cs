@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace FS.AspNetCore.ResponseWrapper.Models;
 
 /// <summary>
@@ -127,6 +129,7 @@ public class ApiResponse<T>
     /// collection contains specific, actionable error details. Think of Message as the summary
     /// and Errors as the detailed breakdown.
     /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; set; }
 
     /// <summary>
@@ -164,7 +167,8 @@ public class ApiResponse<T>
     /// than being null, which simplifies client-side processing by eliminating null checks before
     /// iteration.
     /// </remarks>
-    public List<string> Errors { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? Errors { get; set; }
 
     /// <summary>
     /// Gets or sets comprehensive metadata about the request and response processing.
@@ -205,6 +209,7 @@ public class ApiResponse<T>
     /// ResponseWrapper configuration, allowing teams to balance the value of diagnostic information
     /// against potential performance overhead in high-throughput scenarios.
     /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ResponseMetadata? Metadata { get; set; }
     
     
@@ -237,6 +242,7 @@ public class ApiResponse<T>
     /// assumptions based on response data structure, the StatusCode provides a reliable, machine-readable
     /// way for frontend applications to implement appropriate user experiences for different scenarios.
     /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? StatusCode { get; set; }
 
     /// <summary>

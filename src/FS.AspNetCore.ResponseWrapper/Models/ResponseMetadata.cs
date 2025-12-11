@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace FS.AspNetCore.ResponseWrapper.Models;
 
 /// <summary>
@@ -28,7 +30,8 @@ public class ResponseMetadata
     /// A unique string identifier for the request, typically a GUID. This value remains
     /// consistent across all components involved in processing the request.
     /// </value>
-    public string RequestId { get; set; } = "";
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RequestId { get; set; }
     
     /// <summary>
     /// Gets or sets the timestamp when the response was generated.
@@ -50,7 +53,8 @@ public class ResponseMetadata
     /// The execution time in milliseconds from request start to response completion.
     /// This includes all processing time but excludes network transmission time.
     /// </value>
-    public long ExecutionTimeMs { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? ExecutionTimeMs { get; set; }
     
     /// <summary>
     /// Gets or sets the API version information for this endpoint.
@@ -72,6 +76,7 @@ public class ResponseMetadata
     /// A correlation identifier that may span multiple services, or null if correlation
     /// tracking is disabled. This value is essential for distributed system debugging.
     /// </value>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CorrelationId { get; set; }
     
     /// <summary>
@@ -105,6 +110,7 @@ public class ResponseMetadata
     /// Pagination metadata including page numbers, sizes, and navigation indicators,
     /// or null if the response does not contain paginated data.
     /// </value>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public PaginationMetadata? Pagination { get; set; }
     
     /// <summary>
@@ -116,6 +122,7 @@ public class ResponseMetadata
     /// Query execution statistics including counts, timing, and caching metrics,
     /// or null if query statistics collection is disabled or no database queries were executed.
     /// </value>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public QueryMetadata? Query { get; set; }
     
     /// <summary>
@@ -127,5 +134,6 @@ public class ResponseMetadata
     /// A dictionary containing custom metadata key-value pairs, or null if no additional
     /// metadata was collected. This enables flexible extension of the metadata structure.
     /// </value>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, object>? Additional { get; set; }
 }
