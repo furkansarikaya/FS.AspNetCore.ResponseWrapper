@@ -5,76 +5,145 @@
 [![GitHub License](https://img.shields.io/github/license/furkansarikaya/FS.AspNetCore.ResponseWrapper)](https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper/blob/main/LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/furkansarikaya/FS.AspNetCore.ResponseWrapper.svg)](https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper/stargazers)
 
-**Automatic API response wrapping with metadata injection for ASP.NET Core applications.**
+**Enterprise-grade API response wrapper for ASP.NET Core with zero code changes.**
 
-FS.AspNetCore.ResponseWrapper provides a consistent, standardized response format for your ASP.NET Core APIs with zero boilerplate code. Transform your raw controller responses into rich, metadata-enhanced API responses that include execution timing, pagination details, correlation IDs, status codes, and comprehensive error handling.
+FS.AspNetCore.ResponseWrapper provides a powerful, production-ready solution for standardizing API responses across your ASP.NET Core applications. Transform your raw controller responses into rich, metadata-enhanced API responses with automatic status code extraction, custom metadata injection, comprehensive error handling, and intelligent pagination support—all without modifying your existing code.
 
 ## 🎯 Why ResponseWrapper?
 
-Building robust APIs means handling consistent response formats, error management, timing information, status codes, and pagination metadata. Without a standardized approach, you end up with:
+Building robust APIs requires consistent response formats, sophisticated error handling, request tracking, status code management, and pagination metadata. Without a standardized approach, you face:
 
 - **Inconsistent Response Formats**: Different endpoints returning data in different structures
 - **Manual Error Handling**: Writing repetitive error response logic in every controller
 - **Missing Metadata**: No execution timing, correlation IDs, or request tracking
-- **Complex Pagination**: Mixing business data with pagination information
-- **Status Code Confusion**: Mixing HTTP status codes with application-specific workflow states
+- **Complex Status Management**: Mixing HTTP status codes with application-specific workflow states
+- **Pagination Chaos**: Mixing business data with pagination information across different libraries
+- **Error Code Inconsistency**: No standardized error identification for client-side handling
 - **Debugging Difficulties**: Limited insight into request processing and performance
 
-ResponseWrapper solves all these challenges by automatically wrapping your API responses with a consistent structure, comprehensive metadata, and intelligent error handling.
+ResponseWrapper solves all these challenges by automatically transforming your API responses with enterprise-grade features and zero boilerplate code.
 
 ## ✨ Key Features
 
 ### 🔄 Automatic Response Wrapping
-Transform any controller response into a standardized format without changing your existing code.
+Transform any controller response into a standardized format without changing your existing code. Supports all response types including single objects, collections, and paginated results.
+
+### 📋 Comprehensive Response Structure
+Every API response includes:
+- **Success Indicator**: Clear boolean flag for operation outcome
+- **Business Data**: Your actual response data, clean and focused
+- **Status Codes**: Application-specific status codes for workflow management
+- **Messages**: Human-readable messages for user communication
+- **Error Details**: Structured error information with validation details
+- **Rich Metadata**: Complete request/response lifecycle information
+
+### 🏷️ Intelligent Status Code & Message Management
+Automatic extraction and promotion of status codes and messages using three dedicated interfaces:
+
+- **IHasStatusCode**: Automatically extracts and promotes status codes from response DTOs to the top-level API response
+- **IHasMessage**: Automatically extracts and promotes messages from response DTOs for consistent user communication
+- **IHasMetadata**: Enables custom metadata injection from your response objects into the metadata structure
+
+This powerful trinity of interfaces enables:
+- Complex workflow management beyond simple success/failure
+- Rich client-side conditional logic and user experience flows
+- Clean separation between business data and metadata
+- Application-specific metadata that enhances client capabilities
+
+### 🎨 Custom Metadata Support
+Extend API responses with application-specific metadata using the **IHasMetadata** interface:
+- Workflow state information
+- Feature flags and permissions
+- Business process indicators
+- Any custom data your clients need
+- Automatic merging with system metadata
+- Intelligent conflict resolution
 
 ### ⏱️ Performance Monitoring
-Built-in execution time tracking and database query statistics for performance optimization.
+Built-in execution time tracking and database query statistics:
+- Request execution timing
+- Database query counts and execution times
+- Cache hit/miss ratios
+- Individual query tracking for debugging
 
 ### 🔍 Request Tracing
-Automatic correlation ID generation and tracking for distributed systems debugging.
+Automatic correlation ID generation and tracking:
+- End-to-end request tracking across services
+- Distributed system debugging support
+- Log correlation and request flow analysis
+- Custom or automatic correlation ID handling
 
-### 📊 Application Status Codes
-Intelligent status code extraction and promotion from response data, enabling complex workflow management and rich client-side conditional logic.
-
-### 📄 Smart Pagination
-Automatic detection and clean separation of pagination metadata from business data using duck typing.
+### 📄 Universal Pagination Support
+Automatic pagination detection using **duck typing** principles:
+- Works with **ANY** pagination library or custom implementation
+- No interface implementation required
+- Automatic metadata extraction and separation
+- Clean business data without pagination clutter
+- Supports: PagedList, X.PagedList, custom pagination, third-party libraries
 
 ### 🚨 Comprehensive Error Handling
-Global exception handling with customizable error messages and consistent error response format.
+Global exception handling with rich error information:
+- **12 Built-in Exception Types**: ValidationException, NotFoundException, BusinessException, ConflictException, UnauthorizedException, ForbiddenAccessException, BadRequestException, TimeoutException, TooManyRequestsException, ServiceUnavailableException, CustomHttpStatusException, ApplicationExceptionBase
+- **Automatic Error Code Extraction**: Every exception provides machine-readable error codes
+- **Error Code Promotion**: Error codes automatically promoted to ApiResponse level
+- **Customizable Error Messages**: Full localization and branding support
+- **Structured Error Responses**: Consistent error format across all endpoints
+- **Validation Error Details**: Detailed property-level validation error information
+- **ExposeMessage Support**: Selectively expose detailed exception messages with exception.Data["ExposeMessage"] = true
+- **Security-First Design**: Hides sensitive error details by default, shows user-friendly messages
 
 ### 🎛️ Flexible Configuration
-Extensive configuration options for customizing behavior, excluding specific endpoints, and controlling metadata generation.
+Extensive configuration options:
+- Enable/disable specific features (execution tracking, pagination, correlation IDs)
+- Exclude specific paths or response types
+- Custom DateTime providers for testing
+- Custom logger integration
+- Separate success/error wrapping control
+- Database query statistics integration
 
-### 🦆 Duck Typing Support
-Works with ANY pagination implementation - no need to change existing pagination interfaces.
+### 🦆 Duck Typing Philosophy
+ResponseWrapper uses duck typing for maximum compatibility:
+- **Pagination**: "If it has Page, PageSize, TotalPages, etc., it's paginated"
+- **No Interface Requirements**: Works with your existing code
+- **Library Agnostic**: Compatible with any pagination library
+- **Reflection Caching**: High performance with minimal overhead
+
+### 🛡️ Production-Ready
+Built for enterprise applications:
+- **.NET 10.0** support
+- Minimal performance overhead
+- Comprehensive logging
+- Extensive error handling
+- Defensive programming patterns
+- Thread-safe operations
+- NuGet package ready
 
 ## 📦 Installation
 
-Install the package via NuGet Package Manager:
-
+### Via .NET CLI
 ```bash
 dotnet add package FS.AspNetCore.ResponseWrapper
 ```
 
-Or via Package Manager Console:
-
+### Via Package Manager Console
 ```powershell
 Install-Package FS.AspNetCore.ResponseWrapper
 ```
 
-Or add directly to your `.csproj` file:
-
+### Via PackageReference
 ```xml
-<PackageReference Include="FS.AspNetCore.ResponseWrapper" Version="9.1.0" />
+<PackageReference Include="FS.AspNetCore.ResponseWrapper" Version="10.0.1" />
 ```
+
+**Requirements:**
+- .NET 10.0 or later
+- ASP.NET Core Web API project
 
 ## 🚀 Quick Start
 
-Getting started with ResponseWrapper is incredibly simple. Add it to your ASP.NET Core application in just two steps:
-
 ### Step 1: Register ResponseWrapper Services
 
-In your `Program.cs` file, add ResponseWrapper to your service collection:
+In your `Program.cs`:
 
 ```csharp
 using FS.AspNetCore.ResponseWrapper;
@@ -97,9 +166,7 @@ app.MapControllers();
 app.Run();
 ```
 
-### Step 2: Add Global Exception Handling (Optional but Recommended)
-
-For comprehensive error handling, add the middleware:
+### Step 2: Add Global Exception Handling (Recommended)
 
 ```csharp
 var app = builder.Build();
@@ -114,11 +181,10 @@ app.MapControllers();
 app.Run();
 ```
 
-That's it! Your API responses are now automatically wrapped. Let's see what this means in practice.
+### Step 3: Start Using - No Code Changes Needed!
 
-## 📊 Before and After
+Your existing controllers work automatically:
 
-### Before: Raw Controller Response
 ```csharp
 [ApiController]
 [Route("api/[controller]")]
@@ -132,35 +198,40 @@ public class UsersController : ControllerBase
 }
 ```
 
-**Raw Response:**
-```json
-[
-  {"id": 1, "name": "John Doe", "email": "john@example.com"},
-  {"id": 2, "name": "Jane Smith", "email": "jane@example.com"}
-]
+**That's it!** Your responses are now automatically wrapped with comprehensive metadata.
+
+## 📊 Response Structure
+
+### Basic Response Example
+
+**Your Controller:**
+```csharp
+[HttpGet("{id}")]
+public async Task<User> GetUser(int id)
+{
+    return await _userService.GetUserAsync(id);
+}
 ```
 
-### After: ResponseWrapper Enhanced
-**Same Controller Code** - No changes needed!
-
-**Enhanced Response:**
+**Wrapped Response:**
 ```json
 {
   "success": true,
-  "data": [
-    {"id": 1, "name": "John Doe", "email": "john@example.com"},
-    {"id": 2, "name": "Jane Smith", "email": "jane@example.com"}
-  ],
+  "data": {
+    "id": 1,
+    "name": "John Doe",
+    "email": "john@example.com"
+  },
   "message": null,
   "statusCode": null,
-  "errors": [],
+  "errors": null,
   "metadata": {
     "requestId": "550e8400-e29b-41d4-a716-446655440000",
-    "timestamp": "2024-01-15T10:30:45.123Z",
+    "timestamp": "2025-01-15T10:30:45.123Z",
     "executionTimeMs": 42,
     "version": "1.0",
     "correlationId": "abc123",
-    "path": "/api/users",
+    "path": "/api/users/1",
     "method": "GET",
     "additional": {
       "requestSizeBytes": 0,
@@ -170,9 +241,169 @@ public class UsersController : ControllerBase
 }
 ```
 
-## 🎛️ Configuration Options
+### Response with Status Code & Message
 
-ResponseWrapper provides extensive configuration options to customize behavior according to your needs.
+**Your Controller:**
+```csharp
+public class UserRegistrationResult : IHasStatusCode, IHasMessage
+{
+    public int UserId { get; set; }
+    public string Email { get; set; }
+    public string StatusCode { get; set; } = "EMAIL_VERIFICATION_REQUIRED";
+    public string Message { get; set; } = "Account created successfully. Please verify your email.";
+}
+
+[HttpPost("register")]
+public async Task<UserRegistrationResult> RegisterUser(RegisterRequest request)
+{
+    return await _userService.RegisterAsync(request);
+}
+```
+
+**Wrapped Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "userId": 123,
+    "email": "user@example.com"
+  },
+  "statusCode": "EMAIL_VERIFICATION_REQUIRED",
+  "message": "Account created successfully. Please verify your email.",
+  "errors": null,
+  "metadata": {
+    "requestId": "...",
+    "executionTimeMs": 58
+  }
+}
+```
+
+Notice how `statusCode` and `message` are automatically promoted to the top level while being removed from the data object for clean separation!
+
+### Response with Custom Metadata
+
+**Your Controller:**
+```csharp
+public class PaymentResult : IHasStatusCode, IHasMessage, IHasMetadata
+{
+    public string TransactionId { get; set; }
+    public decimal Amount { get; set; }
+
+    public string StatusCode { get; set; } = "PAYMENT_PENDING";
+    public string Message { get; set; } = "Payment is being processed";
+
+    public Dictionary<string, object> Metadata { get; set; } = new()
+    {
+        { "paymentMethod", "credit_card" },
+        { "processingTime", 3 },
+        { "requiresConfirmation", true }
+    };
+}
+
+[HttpPost("process-payment")]
+public async Task<PaymentResult> ProcessPayment(PaymentRequest request)
+{
+    return await _paymentService.ProcessAsync(request);
+}
+```
+
+**Wrapped Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "transactionId": "TXN-12345",
+    "amount": 99.99
+  },
+  "statusCode": "PAYMENT_PENDING",
+  "message": "Payment is being processed",
+  "metadata": {
+    "requestId": "...",
+    "executionTimeMs": 125,
+    "additional": {
+      "paymentMethod": "credit_card",
+      "processingTime": 3,
+      "requiresConfirmation": true,
+      "clientIP": "192.168.1.1"
+    }
+  }
+}
+```
+
+Custom metadata is automatically extracted and merged with system metadata!
+
+### Paginated Response Example
+
+**Your Controller:**
+```csharp
+// Works with ANY pagination implementation!
+[HttpGet("paged")]
+public async Task<PagedResult<Product>> GetProducts(int page = 1, int pageSize = 10)
+{
+    return await _productService.GetPagedProductsAsync(page, pageSize);
+}
+```
+
+**Wrapped Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      { "id": 1, "name": "Product 1" },
+      { "id": 2, "name": "Product 2" }
+    ]
+  },
+  "metadata": {
+    "pagination": {
+      "page": 1,
+      "pageSize": 10,
+      "totalPages": 5,
+      "totalItems": 47,
+      "hasNextPage": true,
+      "hasPreviousPage": false
+    },
+    "requestId": "...",
+    "executionTimeMs": 25
+  }
+}
+```
+
+Pagination metadata is automatically extracted and separated from business data!
+
+### Error Response Example
+
+**When Exception Occurs:**
+```csharp
+[HttpGet("{id}")]
+public async Task<User> GetUser(int id)
+{
+    var user = await _userService.GetUserAsync(id);
+    if (user == null)
+        throw new NotFoundException("User", id);
+    return user;
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "data": null,
+  "message": "The requested item could not be found",
+  "statusCode": "NOT_FOUND",
+  "errors": ["User (123) was not found."],
+  "metadata": {
+    "requestId": "...",
+    "timestamp": "2025-01-15T10:32:15.456Z",
+    "executionTimeMs": 8,
+    "path": "/api/users/123",
+    "method": "GET"
+  }
+}
+```
+
+## 🎛️ Configuration
 
 ### Basic Configuration
 
@@ -181,23 +412,23 @@ builder.Services.AddResponseWrapper(options =>
 {
     // Enable/disable execution time tracking
     options.EnableExecutionTimeTracking = true;
-    
+
     // Enable/disable pagination metadata extraction
     options.EnablePaginationMetadata = true;
-    
+
     // Enable/disable correlation ID tracking
     options.EnableCorrelationId = true;
-    
-    // Enable/disable database query statistics (requires EF interceptors)
+
+    // Enable/disable database query statistics
     options.EnableQueryStatistics = false;
-    
+
     // Control which responses to wrap
     options.WrapSuccessResponses = true;
     options.WrapErrorResponses = true;
-    
+
     // Exclude specific paths from wrapping
     options.ExcludedPaths = new[] { "/health", "/metrics", "/swagger" };
-    
+
     // Exclude specific result types from wrapping
     options.ExcludedTypes = new[] { typeof(FileResult), typeof(RedirectResult) };
 });
@@ -221,7 +452,7 @@ builder.Services.AddResponseWrapper(
         errorMessages.ForbiddenAccessMessage = "You don't have permission to access this resource";
         errorMessages.BusinessRuleViolationMessage = "This operation violates business rules";
         errorMessages.ApplicationErrorMessage = "We're experiencing technical difficulties";
-        errorMessages.UnexpectedErrorMessage = "An unexpected error occurred. Our team has been notified";
+        errorMessages.UnexpectedErrorMessage = "An unexpected error occurred";
     });
 ```
 
@@ -238,196 +469,60 @@ builder.Services.AddResponseWrapper<CustomApiLogger>(
     configureErrorMessages: errorMessages =>
     {
         errorMessages.ValidationErrorMessage = "Custom validation message";
-        errorMessages.NotFoundErrorMessage = "Custom not found message";
     });
 ```
 
-## 🚨 Error Handling
+## 🏷️ Interfaces for Metadata Extraction
 
-ResponseWrapper provides comprehensive error handling that transforms exceptions into consistent API responses.
+ResponseWrapper provides three powerful interfaces for automatic metadata extraction:
 
-### Built-in Exception Types
+### IHasStatusCode Interface
 
-ResponseWrapper includes several exception types for common scenarios:
-
-```csharp
-// For validation errors
-throw new ValidationException(validationFailures);
-
-// For missing resources
-throw new NotFoundException("User", userId);
-
-// For business rule violations
-throw new BusinessException("Insufficient inventory for this order");
-
-// For authorization failures
-throw new ForbiddenAccessException("Access denied to this resource");
-```
-
-### Exception Response Examples
-
-**Validation Error Response:**
-```json
-{
-  "success": false,
-  "data": null,
-  "message": "Please check your input and try again",
-  "statusCode": "VALIDATION_ERROR",
-  "errors": [
-    "Email is required",
-    "Password must be at least 8 characters"
-  ],
-  "metadata": {
-    "requestId": "550e8400-e29b-41d4-a716-446655440000",
-    "timestamp": "2024-01-15T10:30:45.123Z",
-    "executionTimeMs": 15,
-    "path": "/api/users",
-    "method": "POST"
-  }
-}
-```
-
-**Not Found Error Response:**
-```json
-{
-  "success": false,
-  "data": null,
-  "message": "The requested item could not be found",
-  "statusCode": "NOT_FOUND",
-  "errors": ["User (123) was not found."],
-  "metadata": {
-    "requestId": "550e8400-e29b-41d4-a716-446655440001",
-    "timestamp": "2024-01-15T10:32:15.456Z",
-    "executionTimeMs": 8,
-    "path": "/api/users/123",
-    "method": "GET"
-  }
-}
-```
-
-### Custom Error Messages
-
-Customize error messages for different environments or languages:
+Automatically extracts and promotes status codes to the ApiResponse level:
 
 ```csharp
-// English messages
-errorMessages.ValidationErrorMessage = "Please check your input and try again";
-errorMessages.NotFoundErrorMessage = "The requested item could not be found";
-
-// Turkish messages
-errorMessages.ValidationErrorMessage = "Lütfen girdiğiniz bilgileri kontrol edin";
-errorMessages.NotFoundErrorMessage = "Aradığınız öğe bulunamadı";
-
-// Developer-friendly messages for development environment
-if (environment.IsDevelopment())
+public interface IHasStatusCode
 {
-    errorMessages.ValidationErrorMessage = "Validation failed - check detailed errors";
-    errorMessages.ApplicationErrorMessage = "Application error - check logs for stack trace";
+    string? StatusCode { get; }
 }
 ```
 
-## 📊 Application Status Codes
-
-One of ResponseWrapper's powerful features is its intelligent application status code handling, which enables complex workflow management beyond simple success/failure indicators.
-
-### The Problem with HTTP Status Codes Alone
-
-HTTP status codes are great for transport-level communication, but modern applications often need richer status information:
-
-```json
-{
-  "success": true,
-  "data": {"userId": 123, "email": "user@example.com"},
-  "statusCode": "EMAIL_VERIFICATION_REQUIRED",
-  "message": "Account created successfully. Please verify your email."
-}
-```
-
-This enables sophisticated client-side logic based on application state rather than just HTTP semantics.
-
-### Automatic Status Code Extraction
-
-ResponseWrapper automatically extracts status codes from your response data when they implement the `IHasStatusCode` interface:
-
+**Usage Example:**
 ```csharp
-// Your response DTO
-public class UserRegistrationResult : IHasStatusCode
-{
-    public int UserId { get; set; }
-    public string Email { get; set; }
-    public string StatusCode { get; set; } = "EMAIL_VERIFICATION_REQUIRED";
-    public string Message { get; set; } = "Please verify your email to complete registration";
-}
-
-// Your controller
-[HttpPost("register")]
-public async Task<UserRegistrationResult> RegisterUser(RegisterRequest request)
-{
-    var result = await _userService.RegisterAsync(request);
-    return result; // StatusCode is automatically promoted to ApiResponse level
-}
-```
-
-**Resulting Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "userId": 123,
-    "email": "user@example.com"
-  },
-  "statusCode": "EMAIL_VERIFICATION_REQUIRED",
-  "message": "Please verify your email to complete registration",
-  "metadata": { ... }
-}
-```
-
-Notice how the status code and message are promoted to the top-level ApiResponse while the data remains clean and focused on business information.
-
-### Complex Workflow Examples
-
-```csharp
-// Authentication workflow
 public class LoginResult : IHasStatusCode
 {
     public string Token { get; set; }
     public UserProfile User { get; set; }
     public string StatusCode { get; set; }
-    public string Message { get; set; }
 }
 
 // Different status codes for different scenarios
-switch (authResult.Status)
+[HttpPost("login")]
+public async Task<LoginResult> Login(LoginRequest request)
 {
-    case AuthStatus.Success:
-        return new LoginResult 
-        { 
-            Token = token, 
-            User = user, 
-            StatusCode = "LOGIN_SUCCESS",
-            Message = "Welcome back!"
-        };
-    
-    case AuthStatus.RequiresTwoFactor:
-        return new LoginResult 
-        { 
-            StatusCode = "TWO_FACTOR_REQUIRED",
-            Message = "Please enter your authentication code"
-        };
-    
-    case AuthStatus.PasswordExpired:
-        return new LoginResult 
-        { 
-            StatusCode = "PASSWORD_EXPIRED",
-            Message = "Your password has expired. Please update it."
-        };
+    var result = await _authService.AuthenticateAsync(request);
+
+    return result.Status switch
+    {
+        AuthStatus.Success => new LoginResult
+        {
+            Token = token,
+            User = user,
+            StatusCode = "LOGIN_SUCCESS"
+        },
+        AuthStatus.RequiresTwoFactor => new LoginResult
+        {
+            StatusCode = "TWO_FACTOR_REQUIRED"
+        },
+        AuthStatus.PasswordExpired => new LoginResult
+        {
+            StatusCode = "PASSWORD_EXPIRED"
+        }
+    };
 }
 ```
 
-### Client-Side Usage
-
-The status codes enable sophisticated client-side logic:
-
+**Client-Side Benefits:**
 ```typescript
 const response = await api.post('/auth/login', credentials);
 
@@ -442,73 +537,514 @@ if (response.success) {
         case 'PASSWORD_EXPIRED':
             router.push('/change-password');
             break;
-        case 'EMAIL_VERIFICATION_REQUIRED':
-            showEmailVerificationPrompt();
-            break;
     }
-} else {
-    handleErrors(response.errors);
 }
 ```
 
-## 📄 Pagination Support
+### IHasMessage Interface
 
-One of ResponseWrapper's most powerful features is its intelligent pagination handling using duck typing.
+Automatically extracts and promotes messages to the ApiResponse level:
 
-### The Problem with Traditional Pagination
-
-Most pagination libraries mix business data with pagination metadata:
-
-```json
+```csharp
+public interface IHasMessage
 {
-  "items": [...],
-  "page": 1,
-  "pageSize": 10,
-  "totalPages": 5,
-  "totalItems": 47
+    string? Message { get; }
 }
 ```
 
-This creates inconsistent API responses and makes client development more complex.
+**Usage Example:**
+```csharp
+public class OrderResult : IHasStatusCode, IHasMessage
+{
+    public string OrderId { get; set; }
+    public string StatusCode { get; set; }
+    public string Message { get; set; }
+}
 
-### ResponseWrapper's Solution: Clean Separation
+[HttpPost("orders")]
+public async Task<OrderResult> CreateOrder(OrderRequest request)
+{
+    if (!await _inventoryService.IsAvailable(request.ProductId, request.Quantity))
+    {
+        return new OrderResult
+        {
+            StatusCode = "INSUFFICIENT_INVENTORY",
+            Message = "Not enough items in stock. Please reduce quantity."
+        };
+    }
 
-ResponseWrapper automatically detects pagination objects and separates business data from pagination metadata:
+    var order = await _orderService.CreateAsync(request);
+    return new OrderResult
+    {
+        OrderId = order.Id,
+        StatusCode = "ORDER_CREATED",
+        Message = "Your order has been placed successfully"
+    };
+}
+```
 
-**Clean Response with Separated Metadata:**
+### IHasMetadata Interface
+
+Enables custom metadata injection:
+
+```csharp
+public interface IHasMetadata
+{
+    Dictionary<string, object>? Metadata { get; }
+}
+```
+
+**Usage Example:**
+```csharp
+public class ProcessResult : IHasStatusCode, IHasMessage, IHasMetadata
+{
+    public string ProcessId { get; set; }
+    public string StatusCode { get; set; }
+    public string Message { get; set; }
+    public Dictionary<string, object> Metadata { get; set; }
+}
+
+[HttpPost("process")]
+public async Task<ProcessResult> StartProcess(ProcessRequest request)
+{
+    var result = await _processService.StartAsync(request);
+
+    return new ProcessResult
+    {
+        ProcessId = result.Id,
+        StatusCode = "PROCESS_STARTED",
+        Message = "Process initiated successfully",
+        Metadata = new Dictionary<string, object>
+        {
+            { "estimatedCompletionTime", result.EstimatedTime },
+            { "priority", result.Priority },
+            { "assignedWorker", result.Worker },
+            { "canCancel", true }
+        }
+    };
+}
+```
+
+**Combined Response:**
 ```json
 {
   "success": true,
   "data": {
-    "items": [
-      {"id": 1, "name": "Product 1"},
-      {"id": 2, "name": "Product 2"}
-    ]
+    "processId": "PROC-12345"
   },
+  "statusCode": "PROCESS_STARTED",
+  "message": "Process initiated successfully",
   "metadata": {
-    "pagination": {
-      "page": 1,
-      "pageSize": 10,
-      "totalPages": 5,
-      "totalItems": 47,
-      "hasNextPage": true,
-      "hasPreviousPage": false
-    },
     "requestId": "...",
-    "executionTimeMs": 25
+    "executionTimeMs": 45,
+    "additional": {
+      "estimatedCompletionTime": 120,
+      "priority": "high",
+      "assignedWorker": "worker-03",
+      "canCancel": true,
+      "clientIP": "192.168.1.1"
+    }
   }
 }
 ```
 
-### Duck Typing: Works with ANY Pagination Library
+## 🚨 Exception Handling & Error Codes
 
-ResponseWrapper uses duck typing, which means it works with ANY pagination implementation that has the required properties. You don't need to change your existing code!
+ResponseWrapper includes comprehensive exception handling with automatic error code extraction and promotion.
 
-**Works with your existing pagination classes:**
+### Built-in Exception Types
+
+All exceptions derive from `ApplicationExceptionBase` which provides automatic error code support:
+
+#### 1. ValidationException
+
+For input validation errors with detailed property-level information:
 
 ```csharp
-// Your existing pagination class - no changes needed!
-public class MyCustomPagedResult<T>
+// With FluentValidation
+var failures = validationResult.Errors;
+throw new ValidationException(failures);
+
+// With custom message
+throw new ValidationException("Validation failed");
+
+// With custom error code
+throw new ValidationException("Invalid input", "CUSTOM_VALIDATION_ERROR");
+```
+
+**Response:**
+```json
+{
+  "success": false,
+  "statusCode": "VALIDATION_ERROR",
+  "message": "Please check your input and try again",
+  "errors": ["Email is required", "Password must be at least 8 characters"]
+}
+```
+
+#### 2. NotFoundException
+
+For missing resources:
+
+```csharp
+// Structured format
+throw new NotFoundException("User", userId);
+
+// Custom message
+throw new NotFoundException("User account not found");
+
+// Custom error code
+throw new NotFoundException("Resource unavailable", "RESOURCE_ARCHIVED");
+```
+
+**Response (HTTP 404):**
+```json
+{
+  "success": false,
+  "statusCode": "NOT_FOUND",
+  "message": "The requested item could not be found",
+  "errors": ["User (123) was not found."]
+}
+```
+
+#### 3. BusinessException
+
+For business rule violations:
+
+```csharp
+// Basic usage
+throw new BusinessException("Insufficient inventory for this order");
+
+// With error code
+throw new BusinessException(
+    "Cannot complete transaction",
+    "INSUFFICIENT_FUNDS"
+);
+```
+
+**Response (HTTP 400):**
+```json
+{
+  "success": false,
+  "statusCode": "BUSINESS_RULE_VIOLATION",
+  "message": "This operation violates business rules",
+  "errors": ["Insufficient inventory for this order"]
+}
+```
+
+#### 4. ConflictException
+
+For resource conflicts:
+
+```csharp
+throw new ConflictException("Email address is already in use");
+```
+
+**Response (HTTP 409):**
+```json
+{
+  "success": false,
+  "statusCode": "CONFLICT",
+  "errors": ["Email address is already in use"]
+}
+```
+
+#### 5. UnauthorizedException
+
+For authentication failures:
+
+```csharp
+throw new UnauthorizedException("Invalid credentials");
+```
+
+**Response (HTTP 401):**
+```json
+{
+  "success": false,
+  "statusCode": "UNAUTHORIZED",
+  "message": "Authentication required"
+}
+```
+
+#### 6. ForbiddenAccessException
+
+For authorization failures:
+
+```csharp
+throw new ForbiddenAccessException("Admin access required");
+```
+
+**Response (HTTP 403):**
+```json
+{
+  "success": false,
+  "statusCode": "FORBIDDEN",
+  "message": "Access forbidden"
+}
+```
+
+#### 7. BadRequestException
+
+For general bad requests:
+
+```csharp
+throw new BadRequestException("Invalid request format");
+```
+
+**Response (HTTP 400):**
+```json
+{
+  "success": false,
+  "statusCode": "BAD_REQUEST",
+  "errors": ["Invalid request format"]
+}
+```
+
+#### 8. TimeoutException
+
+For timeout scenarios:
+
+```csharp
+throw new TimeoutException("Operation timed out");
+```
+
+**Response (HTTP 408):**
+```json
+{
+  "success": false,
+  "statusCode": "TIMEOUT",
+  "errors": ["Operation timed out"]
+}
+```
+
+#### 9. TooManyRequestsException
+
+For rate limiting:
+
+```csharp
+throw new TooManyRequestsException("Rate limit exceeded");
+```
+
+**Response (HTTP 429):**
+```json
+{
+  "success": false,
+  "statusCode": "TOO_MANY_REQUESTS",
+  "errors": ["Rate limit exceeded"]
+}
+```
+
+#### 10. ServiceUnavailableException
+
+For service unavailability:
+
+```csharp
+throw new ServiceUnavailableException("Database is temporarily unavailable");
+```
+
+**Response (HTTP 503):**
+```json
+{
+  "success": false,
+  "statusCode": "SERVICE_UNAVAILABLE",
+  "errors": ["Database is temporarily unavailable"]
+}
+```
+
+#### 11. CustomHttpStatusException
+
+For any custom HTTP status code:
+
+```csharp
+// With auto-generated error code
+throw new CustomHttpStatusException("Payment required", 402);
+
+// With custom error code
+throw new CustomHttpStatusException(
+    "Resource locked",
+    423,
+    "RESOURCE_LOCKED"
+);
+```
+
+**Response (HTTP 402/423):**
+```json
+{
+  "success": false,
+  "statusCode": "HTTP_402", // or "RESOURCE_LOCKED"
+  "errors": ["Payment required"]
+}
+```
+
+### Error Code Extraction System
+
+ResponseWrapper automatically extracts and promotes error codes from ALL exception types:
+
+1. **Custom Exception Codes**: From ApplicationExceptionBase.Code property
+2. **Data Dictionary Codes**: From exception.Data["ErrorCode"]
+3. **Fallback Codes**: Automatic codes based on exception type
+
+```csharp
+// Example: Error code extraction in action
+public class CustomBusinessException : ApplicationExceptionBase
+{
+    public CustomBusinessException(string message, string code)
+        : base(message, code) { }
+}
+
+throw new CustomBusinessException(
+    "Custom business rule violated",
+    "CUSTOM_BUSINESS_001"
+);
+```
+
+**Response:**
+```json
+{
+  "success": false,
+  "statusCode": "CUSTOM_BUSINESS_001",
+  "message": "This operation violates business rules",
+  "errors": ["Custom business rule violated"]
+}
+```
+
+### Customizing Error Messages
+
+```csharp
+builder.Services.AddResponseWrapper(
+    options => { },
+    errorMessages =>
+    {
+        // Customize for your application or locale
+        errorMessages.ValidationErrorMessage = "Girdiğiniz bilgileri kontrol edin";
+        errorMessages.NotFoundErrorMessage = "Aradığınız kayıt bulunamadı";
+        errorMessages.UnauthorizedAccessMessage = "Giriş yapmanız gerekiyor";
+        errorMessages.ForbiddenAccessMessage = "Bu işlem için yetkiniz bulunmuyor";
+        errorMessages.BusinessRuleViolationMessage = "İş kuralları ihlali";
+        errorMessages.ApplicationErrorMessage = "Teknik bir sorun oluştu";
+        errorMessages.UnexpectedErrorMessage = "Beklenmeyen bir hata oluştu";
+    });
+```
+
+### Exposing Exception Messages (ExposeMessage)
+
+For security reasons, ResponseWrapper hides detailed exception messages from users by default and shows configured user-friendly messages instead. However, you can selectively expose specific exception messages using the `ExposeMessage` feature:
+
+```csharp
+// Example: Expose a specific exception message to users
+public async Task<Product> ProcessOrder(int orderId)
+{
+    try
+    {
+        return await _orderService.ProcessAsync(orderId);
+    }
+    catch (Exception ex)
+    {
+        // Mark this exception message as safe to expose
+        ex.Data["ExposeMessage"] = true;
+        throw;
+    }
+}
+```
+
+**When ExposeMessage is true:**
+- The actual exception message is shown to users
+- HTTP 400 Bad Request is returned (instead of 500)
+- The error is logged as information (not as error)
+
+**When ExposeMessage is false (default):**
+- Configured user-friendly error messages are shown
+- HTTP 500 Internal Server Error is returned
+- The error is logged as error level
+- Actual exception details are hidden for security
+
+**Use Cases:**
+- **Development/Testing**: Expose detailed error information for debugging
+- **Business Validation**: Show specific business rule violation messages
+- **Third-Party Integrations**: Display detailed error messages from external APIs
+- **User Input Errors**: Provide specific feedback about what went wrong
+
+**Example with Business Logic:**
+```csharp
+public async Task<Order> PlaceOrder(OrderRequest request)
+{
+    var inventory = await _inventoryService.CheckAvailabilityAsync(request.ProductId);
+
+    if (inventory.Quantity < request.Quantity)
+    {
+        var exception = new InvalidOperationException(
+            $"Only {inventory.Quantity} items available. You requested {request.Quantity}."
+        );
+
+        // This is a business validation message safe to show users
+        exception.Data["ExposeMessage"] = true;
+        throw exception;
+    }
+
+    return await _orderService.CreateAsync(request);
+}
+```
+
+**Response with ExposeMessage = true:**
+```json
+{
+  "success": false,
+  "statusCode": "INVALID_OPERATION",
+  "message": "Only 5 items available. You requested 10.",
+  "errors": ["Only 5 items available. You requested 10."],
+  "metadata": {
+    "requestId": "...",
+    "executionTimeMs": 23
+  }
+}
+```
+
+**Response with ExposeMessage = false (default):**
+```json
+{
+  "success": false,
+  "statusCode": "INTERNAL_ERROR",
+  "message": "An unexpected error occurred. Our team has been notified",
+  "errors": ["An unexpected error occurred"],
+  "metadata": {
+    "requestId": "...",
+    "executionTimeMs": 23
+  }
+}
+```
+
+**Security Note:**
+⚠️ Only use `ExposeMessage = true` for exceptions that don't contain sensitive information like:
+- Database connection strings
+- Internal file paths
+- Stack traces with code details
+- Authentication credentials
+- System configuration details
+
+## 📄 Pagination Support
+
+ResponseWrapper provides universal pagination support using **duck typing** - it works with ANY pagination implementation!
+
+### How It Works
+
+ResponseWrapper automatically detects pagination by looking for these properties:
+- `Items` (List<T>)
+- `Page` (int)
+- `PageSize` (int)
+- `TotalPages` (int)
+- `TotalItems` (int)
+- `HasNextPage` (bool)
+- `HasPreviousPage` (bool)
+
+**No interface implementation required!**
+
+### Supported Pagination Libraries
+
+Works with ALL of these (and more):
+
+```csharp
+// ✅ Your custom pagination class
+public class MyPagedResult<T>
 {
     public List<T> Items { get; set; }
     public int Page { get; set; }
@@ -519,240 +1055,82 @@ public class MyCustomPagedResult<T>
     public bool HasPreviousPage { get; set; }
 }
 
-// Your controller - no changes needed!
-[HttpGet]
-public async Task<MyCustomPagedResult<Product>> GetProducts()
+// ✅ Third-party libraries (X.PagedList, etc.)
+public class PagedList<T>
 {
-    return await _productService.GetPagedProductsAsync();
+    public List<T> Items { get; set; }
+    // ... same properties
+}
+
+// ✅ Any class with the right properties!
+```
+
+### Usage Example
+
+```csharp
+[HttpGet("products")]
+public async Task<MyPagedResult<Product>> GetProducts(int page = 1, int pageSize = 10)
+{
+    // Use ANY pagination library or custom implementation
+    return await _productService.GetPagedProductsAsync(page, pageSize);
 }
 ```
 
-**Also works with third-party libraries:**
+**Automatic Transformation:**
 
-```csharp
-// Works with EntityFramework extensions
-public async Task<PagedList<User>> GetUsers()
+**Before (Your paginated object):**
+```json
 {
-    return await context.Users.ToPagedListAsync(page, pageSize);
-}
-
-// Works with any library that follows the pagination pattern
-public async Task<PaginatedResult<Order>> GetOrders()
-{
-    return await _orderService.GetPaginatedOrdersAsync();
-}
-```
-
-### Supported Pagination Patterns
-
-ResponseWrapper automatically detects any object with these properties:
-
-- `Items` (List<T>) - The business data
-- `Page` (int) - Current page number
-- `PageSize` (int) - Items per page
-- `TotalPages` (int) - Total number of pages
-- `TotalItems` (int) - Total number of items
-- `HasNextPage` (bool) - Whether next page exists
-- `HasPreviousPage` (bool) - Whether previous page exists
-
-## 🎯 Real-World Usage Examples
-
-### E-Commerce API Example
-
-```csharp
-[ApiController]
-[Route("api/[controller]")]
-public class ProductsController : ControllerBase
-{
-    private readonly IProductService _productService;
-
-    public ProductsController(IProductService productService)
-    {
-        _productService = productService;
-    }
-
-    // Simple product listing - automatically wrapped
-    [HttpGet]
-    public async Task<List<Product>> GetProducts()
-    {
-        return await _productService.GetActiveProductsAsync();
-    }
-
-    // Paginated products - pagination metadata automatically extracted
-    [HttpGet("paged")]
-    public async Task<PagedResult<Product>> GetPagedProducts(int page = 1, int pageSize = 10)
-    {
-        return await _productService.GetPagedProductsAsync(page, pageSize);
-    }
-
-    // Product creation with status codes - automatically wrapped with 201 status
-    [HttpPost]
-    public async Task<ProductCreationResult> CreateProduct(CreateProductRequest request)
-    {
-        // Validation happens automatically via ValidationException
-        if (!ModelState.IsValid)
-        {
-            var failures = ModelState.Values
-                .SelectMany(v => v.Errors)
-                .Select(e => new ValidationFailure("", e.ErrorMessage));
-            throw new ValidationException(failures);
-        }
-
-        return await _productService.CreateProductAsync(request);
-    }
-
-    // Product by ID - automatic 404 handling
-    [HttpGet("{id}")]
-    public async Task<Product> GetProduct(int id)
-    {
-        var product = await _productService.GetProductByIdAsync(id);
-        
-        // This automatically becomes a 404 with proper error structure
-        if (product == null)
-            throw new NotFoundException("Product", id);
-            
-        return product;
-    }
-
-    // File download - automatically excluded from wrapping
-    [HttpGet("{id}/image")]
-    public async Task<IActionResult> GetProductImage(int id)
-    {
-        var imageData = await _productService.GetProductImageAsync(id);
-        return new CustomExportResult(imageData, "product.jpg", "image/jpeg");
-    }
-
-    // Exclude specific endpoint from wrapping
-    [HttpGet("raw")]
-    [SkipApiResponseWrapper("Legacy endpoint for backward compatibility")]
-    public async Task<List<Product>> GetProductsRaw()
-    {
-        return await _productService.GetActiveProductsAsync();
-    }
+  "items": [{"id": 1, "name": "Product 1"}],
+  "page": 1,
+  "pageSize": 10,
+  "totalPages": 5,
+  "totalItems": 47,
+  "hasNextPage": true,
+  "hasPreviousPage": false
 }
 ```
 
-### User Management with Complex Workflows
-
-```csharp
-// Response DTO with status codes
-public class UserActivationResult : IHasStatusCode
+**After (ResponseWrapper transformation):**
+```json
 {
-    public User User { get; set; }
-    public string StatusCode { get; set; }
-    public string Message { get; set; }
-}
-
-[ApiController]
-[Route("api/[controller]")]
-public class UsersController : ControllerBase
-{
-    private readonly IUserService _userService;
-
-    public UsersController(IUserService userService)
-    {
-        _userService = userService;
+  "success": true,
+  "data": {
+    "items": [{"id": 1, "name": "Product 1"}]
+  },
+  "metadata": {
+    "pagination": {
+      "page": 1,
+      "pageSize": 10,
+      "totalPages": 5,
+      "totalItems": 47,
+      "hasNextPage": true,
+      "hasPreviousPage": false
     }
-
-    [HttpPost("{id}/activate")]
-    public async Task<UserActivationResult> ActivateUser(int id)
-    {
-        var user = await _userService.GetUserByIdAsync(id);
-        if (user == null)
-            throw new NotFoundException("User", id);
-
-        // Business rule validation
-        if (user.IsActive)
-        {
-            return new UserActivationResult 
-            { 
-                User = user,
-                StatusCode = "ALREADY_ACTIVE",
-                Message = "User is already active"
-            };
-        }
-
-        if (user.IsSuspended)
-        {
-            return new UserActivationResult 
-            { 
-                StatusCode = "ACCOUNT_SUSPENDED",
-                Message = "Cannot activate suspended user. Please contact support."
-            };
-        }
-
-        var activatedUser = await _userService.ActivateUserAsync(id);
-        return new UserActivationResult 
-        { 
-            User = activatedUser,
-            StatusCode = "ACTIVATION_SUCCESS",
-            Message = "User activated successfully"
-        };
-    }
-
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteUser(int id)
-    {
-        // Authorization check
-        if (!User.IsInRole("Admin"))
-            throw new ForbiddenAccessException("Only administrators can delete users");
-
-        await _userService.DeleteUserAsync(id);
-        
-        // Empty successful response
-        return Ok();
-    }
+  }
 }
 ```
 
-## 🔧 Advanced Scenarios
+Clean separation of business data from pagination metadata!
 
-### Environment-Specific Configuration
+### Performance Optimization
 
-```csharp
-public void ConfigureServices(IServiceCollection services)
-{
-    services.AddResponseWrapper(
-        options =>
-        {
-            options.EnableExecutionTimeTracking = true;
-            options.EnablePaginationMetadata = true;
-            
-            // Enable detailed query stats only in development
-            options.EnableQueryStatistics = Environment.IsDevelopment();
-            
-            // Different excluded paths per environment
-            if (Environment.IsProduction())
-            {
-                options.ExcludedPaths = new[] { "/health" };
-            }
-            else
-            {
-                options.ExcludedPaths = new[] { "/health", "/swagger", "/debug" };
-            }
-        },
-        errorMessages =>
-        {
-            if (Environment.IsDevelopment())
-            {
-                // Detailed messages for development
-                errorMessages.ValidationErrorMessage = "Validation failed - check detailed error list";
-                errorMessages.ApplicationErrorMessage = "Application error - check logs for full stack trace";
-            }
-            else
-            {
-                // User-friendly messages for production
-                errorMessages.ValidationErrorMessage = "Please check your information and try again";
-                errorMessages.ApplicationErrorMessage = "We're experiencing technical difficulties";
-            }
-        });
-}
-```
+ResponseWrapper uses **reflection caching** for optimal performance:
+- First request: Analyzes type structure
+- Subsequent requests: Uses cached information
+- Zero performance penalty after warm-up
 
-### Integration with Entity Framework for Query Statistics
+## 🔧 Advanced Features
+
+### Query Statistics Integration
+
+Track database query performance:
 
 ```csharp
-// Create a custom interceptor for query statistics
+// Enable in configuration
+options.EnableQueryStatistics = true;
+
+// Create Entity Framework interceptor (example)
 public class QueryStatisticsInterceptor : DbConnectionInterceptor
 {
     public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
@@ -761,23 +1139,17 @@ public class QueryStatisticsInterceptor : DbConnectionInterceptor
         InterceptionResult<DbDataReader> result,
         CancellationToken cancellationToken = default)
     {
-        // Track query execution
         var httpContext = GetHttpContext();
         if (httpContext != null)
         {
             var queryStats = GetOrCreateQueryStats(httpContext);
             queryStats["QueriesCount"] = (int)queryStats.GetValueOrDefault("QueriesCount", 0) + 1;
-            
-            var executedQueries = (List<string>)queryStats.GetValueOrDefault("ExecutedQueries", new List<string>());
-            executedQueries.Add(command.CommandText);
-            queryStats["ExecutedQueries"] = executedQueries.ToArray();
         }
-
         return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
     }
 }
 
-// Register the interceptor
+// Register interceptor
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseSqlServer(connectionString)
@@ -785,39 +1157,181 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 });
 ```
 
-### Custom Logger Implementation
+**Response with Query Statistics:**
+```json
+{
+  "metadata": {
+    "query": {
+      "databaseQueriesCount": 3,
+      "databaseExecutionTimeMs": 45,
+      "cacheHits": 5,
+      "cacheMisses": 2
+    }
+  }
+}
+```
+
+### Excluding Endpoints
+
+#### Method 1: Using Attribute
 
 ```csharp
-public class CustomApiLogger : ILogger<ApiResponseWrapperFilter>
+[SkipApiResponseWrapper("Legacy endpoint for backward compatibility")]
+[HttpGet("raw")]
+public async Task<List<Product>> GetProductsRaw()
 {
-    private readonly ILogger<ApiResponseWrapperFilter> _innerLogger;
-    private readonly IMetrics _metrics;
+    return await _productService.GetProductsAsync();
+}
+```
 
-    public CustomApiLogger(ILogger<ApiResponseWrapperFilter> innerLogger, IMetrics metrics)
+#### Method 2: Using Configuration
+
+```csharp
+options.ExcludedPaths = new[]
+{
+    "/health",
+    "/metrics",
+    "/swagger",
+    "/api/legacy"
+};
+```
+
+#### Method 3: Using Type Exclusion
+
+```csharp
+options.ExcludedTypes = new[]
+{
+    typeof(FileResult),
+    typeof(RedirectResult),
+    typeof(CustomStreamResult)
+};
+```
+
+### Custom Export Results
+
+For file downloads and special responses:
+
+```csharp
+public class CustomExportResult : ActionResult, ISpecialResult
+{
+    private readonly byte[] _data;
+    private readonly string _fileName;
+    private readonly string _contentType;
+
+    public CustomExportResult(byte[] data, string fileName, string contentType)
     {
-        _innerLogger = innerLogger;
-        _metrics = metrics;
+        _data = data;
+        _fileName = fileName;
+        _contentType = contentType;
     }
 
-    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+    public override async Task ExecuteResultAsync(ActionContext context)
     {
-        // Custom logging logic
-        _innerLogger.Log(logLevel, eventId, state, exception, formatter);
-        
-        // Send metrics
-        if (logLevel >= LogLevel.Warning)
-        {
-            _metrics.Counter("api_errors").Increment();
-        }
+        context.HttpContext.Response.ContentType = _contentType;
+        context.HttpContext.Response.Headers.Add(
+            "Content-Disposition",
+            $"attachment; filename={_fileName}"
+        );
+        await context.HttpContext.Response.Body.WriteAsync(_data);
     }
-
-    // Implement other ILogger methods...
 }
 
-// Register with ResponseWrapper
-services.AddResponseWrapper<CustomApiLogger>(
-    () => DateTime.UtcNow,
-    options => options.EnableExecutionTimeTracking = true);
+[HttpGet("{id}/export")]
+public async Task<IActionResult> ExportData(int id)
+{
+    var data = await _service.ExportAsync(id);
+    return new CustomExportResult(data, "export.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+```
+
+### Environment-Specific Configuration
+
+```csharp
+builder.Services.AddResponseWrapper(
+    options =>
+    {
+        options.EnableExecutionTimeTracking = true;
+
+        // Enable detailed query stats only in development
+        options.EnableQueryStatistics = env.IsDevelopment();
+
+        // Different exclusions per environment
+        options.ExcludedPaths = env.IsProduction()
+            ? new[] { "/health" }
+            : new[] { "/health", "/swagger", "/debug" };
+    },
+    errorMessages =>
+    {
+        if (env.IsDevelopment())
+        {
+            // Detailed messages for development
+            errorMessages.ValidationErrorMessage = "Validation failed - check detailed error list";
+            errorMessages.ApplicationErrorMessage = "Application error - check logs for full stack trace";
+        }
+        else
+        {
+            // User-friendly messages for production
+            errorMessages.ValidationErrorMessage = "Please check your information and try again";
+            errorMessages.ApplicationErrorMessage = "We're experiencing technical difficulties";
+        }
+    });
+```
+
+### Error Message Control with ExposeMessage
+
+Control which exception messages are shown to users using the ExposeMessage feature:
+
+```csharp
+[HttpPost("transfer")]
+public async Task<TransferResult> TransferFunds(TransferRequest request)
+{
+    try
+    {
+        // Validate business rules
+        var account = await _accountService.GetAccountAsync(request.FromAccountId);
+
+        if (account.Balance < request.Amount)
+        {
+            // This is a business validation message safe to expose
+            var ex = new InvalidOperationException(
+                $"Insufficient funds. Available: ${account.Balance}, Requested: ${request.Amount}"
+            );
+            ex.Data["ExposeMessage"] = true;
+            throw ex;
+        }
+
+        // Process transfer
+        return await _transferService.ExecuteAsync(request);
+    }
+    catch (DatabaseException dbEx)
+    {
+        // Database errors should NOT be exposed to users
+        // ExposeMessage is false by default, so this will show generic error
+        _logger.LogError(dbEx, "Database error during transfer");
+        throw; // Will show: "An unexpected error occurred"
+    }
+}
+```
+
+**Development vs Production:**
+```csharp
+// In development, you might want to expose all errors for debugging
+if (env.IsDevelopment())
+{
+    app.Use(async (context, next) =>
+    {
+        try
+        {
+            await next();
+        }
+        catch (Exception ex)
+        {
+            // Expose all errors in development
+            ex.Data["ExposeMessage"] = true;
+            throw;
+        }
+    });
+}
 ```
 
 ## 📋 Best Practices
@@ -854,25 +1368,25 @@ if (env.IsProduction())
 ### 2. Use Specific Exception Types
 
 ```csharp
-// Good: Specific exception types
+// ✅ Good: Specific exception types with error codes
 if (user == null)
     throw new NotFoundException("User", id);
 
 if (!user.IsActive)
-    throw new BusinessException("User account is not active");
+    throw new BusinessException("User account is not active", "ACCOUNT_INACTIVE");
 
 if (!User.IsInRole("Admin"))
     throw new ForbiddenAccessException("Administrator access required");
 
-// Avoid: Generic exceptions
+// ❌ Avoid: Generic exceptions
 // throw new Exception("Something went wrong");
 ```
 
 ### 3. Leverage Application Status Codes
 
 ```csharp
-// Good: Rich status information
-public class PaymentResult : IHasStatusCode
+// ✅ Good: Rich status information
+public class PaymentResult : IHasStatusCode, IHasMessage
 {
     public string TransactionId { get; set; }
     public decimal Amount { get; set; }
@@ -884,34 +1398,59 @@ public class PaymentResult : IHasStatusCode
 switch (paymentResponse.Status)
 {
     case PaymentStatus.Success:
-        return new PaymentResult { StatusCode = "PAYMENT_SUCCESS", ... };
+        return new PaymentResult
+        {
+            StatusCode = "PAYMENT_SUCCESS",
+            Message = "Payment processed successfully"
+        };
     case PaymentStatus.InsufficientFunds:
-        return new PaymentResult { StatusCode = "INSUFFICIENT_FUNDS", ... };
-    case PaymentStatus.CardExpired:
-        return new PaymentResult { StatusCode = "CARD_EXPIRED", ... };
+        return new PaymentResult
+        {
+            StatusCode = "INSUFFICIENT_FUNDS",
+            Message = "Insufficient funds in account"
+        };
 }
 ```
 
-### 4. Leverage Custom Error Messages
+### 4. Use Custom Metadata for Enhanced UX
 
 ```csharp
-// Customize messages for better UX
-errorMessages.ValidationErrorMessage = "Please review the highlighted fields and try again";
-errorMessages.NotFoundErrorMessage = "We couldn't find what you're looking for";
-errorMessages.UnauthorizedAccessMessage = "Please sign in to continue";
+// ✅ Good: Provide context for client decisions
+public class OperationResult : IHasStatusCode, IHasMetadata
+{
+    public string ResultId { get; set; }
+    public string StatusCode { get; set; }
+
+    public Dictionary<string, object> Metadata { get; set; } = new()
+    {
+        { "canRetry", true },
+        { "retryAfterSeconds", 30 },
+        { "supportContact", "support@company.com" }
+    };
+}
 ```
 
-### 5. Exclude Appropriate Endpoints
+### 5. Implement Pagination Consistently
 
 ```csharp
-options.ExcludedPaths = new[]
+// ✅ Good: Consistent pagination across all endpoints
+public class PagedResponse<T>
 {
-    "/health",        // Health checks
-    "/metrics",       // Metrics endpoints
-    "/swagger",       // API documentation
-    "/api/files",     // File download endpoints
-    "/webhooks"       // Webhook endpoints
-};
+    public List<T> Items { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages { get; set; }
+    public int TotalItems { get; set; }
+    public bool HasNextPage { get; set; }
+    public bool HasPreviousPage { get; set; }
+}
+
+// Works automatically with ResponseWrapper!
+[HttpGet]
+public async Task<PagedResponse<Product>> GetProducts(int page = 1, int size = 20)
+{
+    return await _service.GetPagedAsync(page, size);
+}
 ```
 
 ### 6. Monitor Performance Impact
@@ -920,91 +1459,335 @@ options.ExcludedPaths = new[]
 // Enable detailed monitoring in development
 options.EnableQueryStatistics = Environment.IsDevelopment();
 
-// Log execution times for performance monitoring
+// Log slow requests
 if (options.EnableExecutionTimeTracking)
 {
-    // Monitor slow requests
     if (executionTimeMs > 1000)
     {
-        logger.LogWarning("Slow request detected: {RequestId} took {ExecutionTime}ms", 
-            requestId, executionTimeMs);
+        logger.LogWarning(
+            "Slow request detected: {RequestId} took {ExecutionTime}ms",
+            requestId,
+            executionTimeMs
+        );
     }
+}
+```
+
+### 7. Control Error Message Exposure
+
+```csharp
+// ✅ Good: Expose only safe business validation messages
+public async Task ProcessPayment(PaymentRequest request)
+{
+    if (request.Amount <= 0)
+    {
+        var ex = new ArgumentException("Payment amount must be greater than zero");
+        ex.Data["ExposeMessage"] = true; // Safe to show
+        throw ex;
+    }
+
+    try
+    {
+        await _paymentGateway.ChargeAsync(request);
+    }
+    catch (PaymentGatewayException pgEx)
+    {
+        // Don't expose payment gateway errors (may contain sensitive info)
+        _logger.LogError(pgEx, "Payment gateway error");
+        throw new ServiceUnavailableException("Payment service is temporarily unavailable");
+    }
+}
+
+// ❌ Avoid: Exposing sensitive system errors
+public async Task GetUserData(int userId)
+{
+    try
+    {
+        return await _database.Query("SELECT * FROM Users WHERE Id = " + userId);
+    }
+    catch (Exception ex)
+    {
+        ex.Data["ExposeMessage"] = true; // ❌ BAD: May expose SQL injection details, connection strings
+        throw;
+    }
+}
+
+// ✅ Good: Use specific exceptions for business logic
+if (order.Status == "Shipped")
+{
+    var ex = new BusinessException(
+        "Cannot cancel order that has already been shipped",
+        "ORDER_ALREADY_SHIPPED"
+    );
+    // No need for ExposeMessage - BusinessException messages are designed to be user-friendly
+    throw ex;
+}
+```
+
+## 🎯 Real-World Examples
+
+### E-Commerce API
+
+```csharp
+[ApiController]
+[Route("api/[controller]")]
+public class OrdersController : ControllerBase
+{
+    // Create order with workflow status
+    [HttpPost]
+    public async Task<OrderResult> CreateOrder(CreateOrderRequest request)
+    {
+        // Validation happens automatically via ValidationException
+        if (!ModelState.IsValid)
+        {
+            var failures = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => new ValidationFailure("", e.ErrorMessage));
+            throw new ValidationException(failures);
+        }
+
+        var result = await _orderService.CreateOrderAsync(request);
+
+        return new OrderResult
+        {
+            OrderId = result.Id,
+            StatusCode = result.RequiresPayment ? "PAYMENT_REQUIRED" : "ORDER_CONFIRMED",
+            Message = result.RequiresPayment
+                ? "Please complete payment to process order"
+                : "Order confirmed and will be shipped soon",
+            Metadata = new Dictionary<string, object>
+            {
+                { "estimatedDelivery", result.EstimatedDeliveryDate },
+                { "paymentUrl", result.PaymentUrl },
+                { "canCancel", true }
+            }
+        };
+    }
+
+    // Get orders with pagination
+    [HttpGet]
+    public async Task<PagedResult<Order>> GetOrders(int page = 1, int pageSize = 20)
+    {
+        return await _orderService.GetPagedOrdersAsync(page, pageSize);
+    }
+
+    // Get order details
+    [HttpGet("{id}")]
+    public async Task<Order> GetOrder(int id)
+    {
+        var order = await _orderService.GetOrderAsync(id);
+        if (order == null)
+            throw new NotFoundException("Order", id);
+        return order;
+    }
+
+    // Cancel order with business rules
+    [HttpPost("{id}/cancel")]
+    public async Task<OrderResult> CancelOrder(int id)
+    {
+        var order = await _orderService.GetOrderAsync(id);
+        if (order == null)
+            throw new NotFoundException("Order", id);
+
+        if (!order.CanBeCancelled)
+            throw new BusinessException(
+                "Order cannot be cancelled after shipping",
+                "ORDER_ALREADY_SHIPPED"
+            );
+
+        await _orderService.CancelOrderAsync(id);
+
+        return new OrderResult
+        {
+            OrderId = id,
+            StatusCode = "ORDER_CANCELLED",
+            Message = "Order has been cancelled successfully"
+        };
+    }
+
+    // Export orders (excluded from wrapping)
+    [HttpGet("export")]
+    public async Task<IActionResult> ExportOrders()
+    {
+        var data = await _orderService.ExportOrdersAsync();
+        return new CustomExportResult(data, "orders.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    }
+}
+
+// DTOs
+public class OrderResult : IHasStatusCode, IHasMessage, IHasMetadata
+{
+    public string OrderId { get; set; }
+    public string StatusCode { get; set; }
+    public string Message { get; set; }
+    public Dictionary<string, object> Metadata { get; set; }
+}
+```
+
+### Authentication API
+
+```csharp
+[ApiController]
+[Route("api/[controller]")]
+public class AuthController : ControllerBase
+{
+    [HttpPost("login")]
+    public async Task<LoginResult> Login(LoginRequest request)
+    {
+        var authResult = await _authService.AuthenticateAsync(request.Email, request.Password);
+
+        return authResult.Status switch
+        {
+            AuthStatus.Success => new LoginResult
+            {
+                Token = authResult.Token,
+                User = authResult.User,
+                StatusCode = "LOGIN_SUCCESS",
+                Message = "Welcome back!",
+                Metadata = new Dictionary<string, object>
+                {
+                    { "tokenExpiresIn", 3600 },
+                    { "refreshAvailable", true }
+                }
+            },
+            AuthStatus.RequiresTwoFactor => new LoginResult
+            {
+                StatusCode = "TWO_FACTOR_REQUIRED",
+                Message = "Please enter your authentication code",
+                Metadata = new Dictionary<string, object>
+                {
+                    { "verificationMethod", "sms" },
+                    { "canResend", true }
+                }
+            },
+            AuthStatus.PasswordExpired => new LoginResult
+            {
+                StatusCode = "PASSWORD_EXPIRED",
+                Message = "Your password has expired. Please update it.",
+                Metadata = new Dictionary<string, object>
+                {
+                    { "mustChange", true }
+                }
+            },
+            AuthStatus.AccountLocked => throw new ForbiddenAccessException(
+                "Account is temporarily locked due to multiple failed login attempts"
+            ),
+            _ => throw new UnauthorizedException("Invalid credentials")
+        };
+    }
+
+    [HttpPost("verify-2fa")]
+    public async Task<LoginResult> VerifyTwoFactor(TwoFactorRequest request)
+    {
+        var result = await _authService.VerifyTwoFactorAsync(request.Code);
+
+        if (!result.Success)
+            throw new UnauthorizedException("Invalid verification code");
+
+        return new LoginResult
+        {
+            Token = result.Token,
+            User = result.User,
+            StatusCode = "LOGIN_SUCCESS",
+            Message = "Two-factor authentication successful"
+        };
+    }
+}
+
+public class LoginResult : IHasStatusCode, IHasMessage, IHasMetadata
+{
+    public string Token { get; set; }
+    public UserProfile User { get; set; }
+    public string StatusCode { get; set; }
+    public string Message { get; set; }
+    public Dictionary<string, object> Metadata { get; set; }
 }
 ```
 
 ## 🐛 Troubleshooting
 
-### Common Issues and Solutions
+### Issue: Responses Not Being Wrapped
 
-#### 1. Responses Not Being Wrapped
-
-**Problem**: Some controller responses are not wrapped.
+**Symptoms**: Some controller responses are not wrapped.
 
 **Solutions**:
-- Ensure controllers have the `[ApiController]` attribute
-- Check that the endpoint is not in `ExcludedPaths`
-- Verify the result type is not in `ExcludedTypes`
-- Make sure `WrapSuccessResponses` is enabled
+- ✅ Ensure controllers have the `[ApiController]` attribute
+- ✅ Check that the endpoint is not in `ExcludedPaths`
+- ✅ Verify the result type is not in `ExcludedTypes`
+- ✅ Make sure `WrapSuccessResponses` is enabled
+- ✅ Check for `[SkipApiResponseWrapper]` attribute
 
 ```csharp
-[ApiController] // Required for automatic wrapping
+[ApiController] // ✅ Required for automatic wrapping
 [Route("api/[controller]")]
 public class UsersController : ControllerBase
 {
-    // This will be wrapped
     [HttpGet]
     public async Task<List<User>> GetUsers() { ... }
 }
 ```
 
-#### 2. Pagination Not Detected
+### Issue: Pagination Not Detected
 
-**Problem**: Pagination metadata is not extracted from custom pagination classes.
+**Symptoms**: Pagination metadata is not extracted from custom pagination classes.
 
-**Solution**: Ensure your pagination class has all required properties:
+**Solution**: Ensure your pagination class has ALL required properties with correct types:
 
 ```csharp
 public class MyPagedResult<T>
 {
-    // All these properties are required
+    // ✅ All these properties are required
     public List<T> Items { get; set; }     // Required
-    public int Page { get; set; }          // Required
-    public int PageSize { get; set; }      // Required
-    public int TotalPages { get; set; }    // Required
-    public int TotalItems { get; set; }    // Required
-    public bool HasNextPage { get; set; }  // Required
-    public bool HasPreviousPage { get; set; } // Required
+    public int Page { get; set; }          // Required (must be int)
+    public int PageSize { get; set; }      // Required (must be int)
+    public int TotalPages { get; set; }    // Required (must be int)
+    public int TotalItems { get; set; }    // Required (must be int)
+    public bool HasNextPage { get; set; }  // Required (must be bool)
+    public bool HasPreviousPage { get; set; } // Required (must be bool)
 }
 ```
 
-#### 3. Status Codes Not Being Extracted
+### Issue: Status Codes Not Being Extracted
 
-**Problem**: Application status codes are not appearing in responses.
+**Symptoms**: Application status codes are not appearing in responses.
 
-**Solution**: Implement the `IHasStatusCode` interface on your response DTOs:
+**Solution**: Implement the `IHasStatusCode` interface:
 
 ```csharp
 public class MyResponse : IHasStatusCode
 {
     public string Data { get; set; }
-    public string StatusCode { get; set; } // This will be promoted to ApiResponse level
-    public string Message { get; set; }    // This will also be promoted
+    public string StatusCode { get; set; } // ✅ This will be promoted
 }
 ```
 
-#### 4. Error Messages Not Showing
+### Issue: Custom Metadata Not Appearing
 
-**Problem**: Custom error messages are not displayed.
+**Symptoms**: Custom metadata is not in the response.
+
+**Solution**: Implement the `IHasMetadata` interface:
+
+```csharp
+public class MyResponse : IHasMetadata
+{
+    public string Data { get; set; }
+    public Dictionary<string, object> Metadata { get; set; } // ✅ This will be merged
+}
+```
+
+### Issue: Error Messages Not Showing
+
+**Symptoms**: Custom error messages are not displayed.
 
 **Solutions**:
-- Ensure `GlobalExceptionHandlingMiddleware` is registered
-- Add the middleware early in the pipeline
-- Check that `WrapErrorResponses` is enabled
+- ✅ Ensure `GlobalExceptionHandlingMiddleware` is registered
+- ✅ Add the middleware EARLY in the pipeline
+- ✅ Check that `WrapErrorResponses` is enabled
 
 ```csharp
 var app = builder.Build();
 
-// Add this EARLY in the pipeline
+// ✅ Add this EARLY in the pipeline
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
 app.UseHttpsRedirection();
@@ -1013,39 +1796,27 @@ app.UseAuthorization();
 app.MapControllers();
 ```
 
-#### 5. Performance Issues
+### Issue: File Downloads Being Wrapped
 
-**Problem**: API responses are slower after adding ResponseWrapper.
-
-**Solutions**:
-- Disable query statistics if not needed: `options.EnableQueryStatistics = false`
-- Exclude high-frequency endpoints: `options.ExcludedPaths = new[] { "/api/high-frequency" }`
-- Disable execution time tracking for production: `options.EnableExecutionTimeTracking = false`
-
-#### 6. File Downloads Being Wrapped
-
-**Problem**: File download endpoints are returning JSON instead of files.
+**Symptoms**: File download endpoints are returning JSON instead of files.
 
 **Solutions**:
-- Use `ISpecialResult` interface for custom file results
-- Add file result types to `ExcludedTypes`
-- Use the `[SkipApiResponseWrapper]` attribute
 
 ```csharp
-// Option 1: Use ISpecialResult
+// Option 1: Implement ISpecialResult
 public class FileDownloadResult : ActionResult, ISpecialResult { ... }
 
 // Option 2: Exclude file types
 options.ExcludedTypes = new[] { typeof(FileResult), typeof(FileStreamResult) };
 
-// Option 3: Skip specific endpoints
+// Option 3: Use attribute
 [SkipApiResponseWrapper("File download endpoint")]
 public async Task<IActionResult> DownloadFile(int id) { ... }
 ```
 
 ## 🤝 Contributing
 
-We welcome contributions to FS.AspNetCore.ResponseWrapper! Here's how you can help:
+We welcome contributions! Here's how you can help:
 
 ### Reporting Issues
 
@@ -1060,7 +1831,7 @@ We welcome contributions to FS.AspNetCore.ResponseWrapper! Here's how you can he
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes with tests
 4. Ensure all tests pass
-5. Update documentation if needed
+5. Update documentation
 6. Commit your changes (`git commit -m 'Add amazing feature'`)
 7. Push to the branch (`git push origin feature/amazing-feature`)
 8. Open a Pull Request
@@ -1084,13 +1855,6 @@ dotnet build
 dotnet test
 ```
 
-### Coding Standards
-
-- Follow Microsoft's C# coding conventions
-- Add comprehensive XML documentation for public APIs
-- Write unit tests for new features
-- Ensure backward compatibility when possible
-
 ## 📜 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -1111,4 +1875,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Made with ❤️ by [Furkan Sarıkaya](https://github.com/furkansarikaya)**
 
-*Transform your ASP.NET Core APIs with consistent, metadata-rich responses and intelligent status code management. Install FS.AspNetCore.ResponseWrapper today and experience the difference!*
+*Transform your ASP.NET Core APIs with enterprise-grade response wrapping, intelligent status code management, universal pagination support, and comprehensive error handling. Install FS.AspNetCore.ResponseWrapper today and elevate your API development experience!*
