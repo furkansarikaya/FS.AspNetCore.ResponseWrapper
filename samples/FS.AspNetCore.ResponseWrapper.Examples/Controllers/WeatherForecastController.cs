@@ -58,6 +58,8 @@ public class WeatherForecastController(ILogger<WeatherForecastController> logger
                 throw new NotFoundException("Test NotFoundException", "NotFoundException");
             case 19:
                 throw new NotFoundException(nameof(Get), 19);
+            case 20:
+                throw new BusinessRuleValidationException("Test BusinessRuleValidationException", "BusinessRule");
             default:
             {
                 var items = Enumerable.Range(1, 5).Select(index => new WeatherForecast

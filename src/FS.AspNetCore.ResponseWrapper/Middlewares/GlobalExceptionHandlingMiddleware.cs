@@ -246,14 +246,30 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
         }
         catch (Exception exception)
         {
+            var isExposeMessage =
+                exception.Data.Contains("ExposeMessage") &&
+                exception.Data["ExposeMessage"] is true;
+
+            var message = isExposeMessage
+                ? exception.Message
+                : _errorMessages.GetUnexpectedErrorMessage();
+
+            var errors = isExposeMessage
+                ? new List<string> { exception.Message }
+                : new List<string> { GetSafeErrorMessage(exception) };
+
+            var statusCode = isExposeMessage
+                ? HttpStatusCode.BadRequest
+                : HttpStatusCode.InternalServerError;
+
             await HandleExceptionAsync(
                 context,
                 exception,
-                _errorMessages.GetUnexpectedErrorMessage(),
-                [GetSafeErrorMessage(exception)],
-                HttpStatusCode.InternalServerError,
+                message,
+                errors,
+                statusCode,
                 errorTrackingData,
-                shouldLogAsError: true); // Unexpected errors should definitely be logged
+                shouldLogAsError: !isExposeMessage);
         }
         finally
         {
@@ -535,6 +551,13 @@ public class GlobalExceptionHandlingMiddleware : IMiddleware
             if (exception is ApplicationExceptionBase appException && !string.IsNullOrEmpty(appException.Code))
             {
                 return appException.Code;
+            }
+
+            if (exception.Data.Contains("ErrorCode") &&
+                exception.Data["ErrorCode"] is string dataErrorCode &&
+                !string.IsNullOrEmpty(dataErrorCode))
+            {
+                return dataErrorCode;
             }
 
             // Provide fallback error codes for system exceptions and specific exception types
