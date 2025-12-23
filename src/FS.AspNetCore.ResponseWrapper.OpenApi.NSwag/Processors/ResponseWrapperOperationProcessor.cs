@@ -106,35 +106,24 @@ public class ResponseWrapperOperationProcessor : IOperationProcessor
         }
         wrappedSchema.Properties["data"] = dataProperty;
 
-        // Add errors array
+        // Add errors array (string array)
         wrappedSchema.Properties["errors"] = new JsonSchemaProperty
         {
             Type = JsonObjectType.Array,
-            Description = "List of errors if any",
+            Description = "List of error messages",
             IsNullableRaw = true,
             Item = new JsonSchema
             {
-                Type = JsonObjectType.Object,
-                Properties =
-                {
-                    ["code"] = new JsonSchemaProperty
-                    {
-                        Type = JsonObjectType.String,
-                        Description = "Error code"
-                    },
-                    ["message"] = new JsonSchemaProperty
-                    {
-                        Type = JsonObjectType.String,
-                        Description = "Error message"
-                    },
-                    ["field"] = new JsonSchemaProperty
-                    {
-                        Type = JsonObjectType.String,
-                        Description = "Field name if validation error",
-                        IsNullableRaw = true
-                    }
-                }
+                Type = JsonObjectType.String
             }
+        };
+
+        // Add statusCode
+        wrappedSchema.Properties["statusCode"] = new JsonSchemaProperty
+        {
+            Type = JsonObjectType.String,
+            Description = "Application-specific status code for complex workflow handling",
+            IsNullableRaw = true
         };
 
         // Add metadata if enabled
@@ -189,29 +178,40 @@ public class ResponseWrapperOperationProcessor : IOperationProcessor
                     ["success"] = new JsonSchemaProperty
                     {
                         Type = JsonObjectType.Boolean,
+                        Description = "Always false for error responses",
                         IsRequired = true
                     },
                     ["message"] = new JsonSchemaProperty
                     {
-                        Type = JsonObjectType.String
+                        Type = JsonObjectType.String,
+                        Description = "Human-readable error message"
                     },
                     ["data"] = new JsonSchemaProperty
                     {
+                        Description = "Always null for error responses",
                         IsNullableRaw = true
                     },
                     ["errors"] = new JsonSchemaProperty
                     {
                         Type = JsonObjectType.Array,
+                        Description = "List of error messages",
                         Item = new JsonSchema
                         {
-                            Type = JsonObjectType.Object,
-                            Properties =
-                            {
-                                ["code"] = new JsonSchemaProperty { Type = JsonObjectType.String },
-                                ["message"] = new JsonSchemaProperty { Type = JsonObjectType.String },
-                                ["field"] = new JsonSchemaProperty { Type = JsonObjectType.String, IsNullableRaw = true }
-                            }
+                            Type = JsonObjectType.String
                         }
+                    },
+                    ["statusCode"] = new JsonSchemaProperty
+                    {
+                        Type = JsonObjectType.String,
+                        Description = "Application-specific status code",
+                        IsNullableRaw = true
+                    },
+                    ["metadata"] = new JsonSchemaProperty
+                    {
+                        Type = JsonObjectType.Object,
+                        Description = "Additional metadata about the request/response",
+                        IsNullableRaw = true,
+                        AllowAdditionalProperties = true
                     }
                 }
             }

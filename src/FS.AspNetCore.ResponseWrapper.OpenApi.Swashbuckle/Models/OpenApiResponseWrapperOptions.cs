@@ -18,6 +18,12 @@ public class OpenApiResponseWrapperOptions
     public bool IncludeErrorExamples { get; set; } = true;
 
     /// <summary>
+    /// Include example values for schemas in OpenAPI documentation
+    /// Default: true
+    /// </summary>
+    public bool IncludeExamples { get; set; } = true;
+
+    /// <summary>
     /// Include metadata schema in OpenAPI documentation
     /// Default: true
     /// </summary>

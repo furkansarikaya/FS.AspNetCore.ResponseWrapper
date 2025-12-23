@@ -19,6 +19,9 @@ public class ResponseWrapperOperationFilter : IOperationFilter
 
     public void Apply(OpenApiOperation operation, OperationFilterContext context)
     {
+        // Add response headers to all responses
+        AddResponseHeaders(operation);
+
         if (!_options.AutoWrapResponses)
             return;
 
@@ -49,6 +52,59 @@ public class ResponseWrapperOperationFilter : IOperationFilter
         if (_options.IncludeErrorExamples)
         {
             AddErrorResponseExamples(operation);
+        }
+    }
+
+    private void AddResponseHeaders(OpenApiOperation operation)
+    {
+        foreach (var response in operation.Responses.Values)
+        {
+            response.Headers ??= new Dictionary<string, OpenApiHeader>();
+
+            // Add X-Request-Id header
+            if (!response.Headers.ContainsKey("X-Request-Id"))
+            {
+                response.Headers.Add("X-Request-Id", new OpenApiHeader
+                {
+                    Description = "Unique request identifier for tracking and correlation",
+                    Schema = new OpenApiSchema { Type = "string", Format = "uuid" },
+                    Example = new OpenApiString("req-" + Guid.NewGuid().ToString("N"))
+                });
+            }
+
+            // Add X-Correlation-Id header
+            if (!response.Headers.ContainsKey("X-Correlation-Id"))
+            {
+                response.Headers.Add("X-Correlation-Id", new OpenApiHeader
+                {
+                    Description = "Correlation ID for distributed tracing across services",
+                    Schema = new OpenApiSchema { Type = "string" },
+                    Example = new OpenApiString("corr-" + Guid.NewGuid().ToString("N"))
+                });
+            }
+
+            // Add ETag header for GET/successful responses
+            var responseCode = response.Headers.Keys.FirstOrDefault();
+            if (responseCode?.StartsWith("2") == true && !response.Headers.ContainsKey("ETag"))
+            {
+                response.Headers.Add("ETag", new OpenApiHeader
+                {
+                    Description = "Entity tag for cache validation (if caching is enabled)",
+                    Schema = new OpenApiSchema { Type = "string" },
+                    Example = new OpenApiString("\"" + Guid.NewGuid().ToString("N") + "\"")
+                });
+            }
+
+            // Add Cache-Control header
+            if (!response.Headers.ContainsKey("Cache-Control"))
+            {
+                response.Headers.Add("Cache-Control", new OpenApiHeader
+                {
+                    Description = "Caching directives for the response",
+                    Schema = new OpenApiSchema { Type = "string" },
+                    Example = new OpenApiString("no-cache, no-store, must-revalidate")
+                });
+            }
         }
     }
 
@@ -102,17 +158,17 @@ public class ResponseWrapperOperationFilter : IOperationFilter
                     ["errors"] = new OpenApiSchema
                     {
                         Type = "array",
-                        Description = "List of errors if any",
+                        Description = "List of error messages if any",
                         Items = new OpenApiSchema
                         {
-                            Type = "object",
-                            Properties = new Dictionary<string, OpenApiSchema>
-                            {
-                                ["code"] = new OpenApiSchema { Type = "string" },
-                                ["message"] = new OpenApiSchema { Type = "string" },
-                                ["field"] = new OpenApiSchema { Type = "string", Nullable = true }
-                            }
+                            Type = "string"
                         },
+                        Nullable = true
+                    },
+                    ["statusCode"] = new OpenApiSchema
+                    {
+                        Type = "string",
+                        Description = "Application-specific status code for complex workflow handling",
                         Nullable = true
                     }
                 },
@@ -141,42 +197,42 @@ public class ResponseWrapperOperationFilter : IOperationFilter
         if (!operation.Responses.ContainsKey("400"))
         {
             operation.Responses["400"] = CreateErrorResponse(
-                "Bad Request",
+                "Bad Request - Validation failed or invalid input",
                 "Validation failed",
-                new[]
-                {
-                    new { code = "VALIDATION_ERROR", message = "Field is required", field = "email" }
-                });
+                new[] { "Field 'email' is required", "Field 'password' must be at least 8 characters" });
         }
 
         // Add 401 Unauthorized example if not exists
         if (!operation.Responses.ContainsKey("401"))
         {
             operation.Responses["401"] = CreateErrorResponse(
-                "Unauthorized",
+                "Unauthorized - Authentication required",
                 "Authentication required",
-                new[]
-                {
-                    new { code = "UNAUTHORIZED", message = "Invalid or missing authentication token", field = (string?)null }
-                });
+                new[] { "Invalid or missing authentication token" });
+        }
+
+        // Add 404 Not Found example if not exists
+        if (!operation.Responses.ContainsKey("404"))
+        {
+            operation.Responses["404"] = CreateErrorResponse(
+                "Not Found - Requested resource does not exist",
+                "Resource not found",
+                new[] { "The requested resource could not be found" });
         }
 
         // Add 500 Internal Server Error example if not exists
         if (!operation.Responses.ContainsKey("500"))
         {
             operation.Responses["500"] = CreateErrorResponse(
-                "Internal Server Error",
+                "Internal Server Error - An unexpected error occurred",
                 "An unexpected error occurred",
-                new[]
-                {
-                    new { code = "INTERNAL_ERROR", message = "An unexpected error occurred while processing your request", field = (string?)null }
-                });
+                new[] { "An internal server error occurred while processing your request" });
         }
     }
 
-    private OpenApiResponse CreateErrorResponse(string description, string message, object[] errors)
+    private OpenApiResponse CreateErrorResponse(string description, string message, string[] errors)
     {
-        return new OpenApiResponse
+        var response = new OpenApiResponse
         {
             Description = description,
             Content = new Dictionary<string, OpenApiMediaType>
@@ -191,35 +247,64 @@ public class ResponseWrapperOperationFilter : IOperationFilter
                             ["success"] = new OpenApiSchema
                             {
                                 Type = "boolean",
-                                Example = new OpenApiBoolean(false)
+                                Description = "Always false for error responses"
                             },
                             ["message"] = new OpenApiSchema
                             {
                                 Type = "string",
-                                Example = new OpenApiString(message)
+                                Description = "Human-readable error message"
                             },
                             ["data"] = new OpenApiSchema
                             {
                                 Nullable = true,
-                                Example = new OpenApiNull()
+                                Description = "Always null for error responses"
                             },
                             ["errors"] = new OpenApiSchema
                             {
                                 Type = "array",
+                                Description = "List of error messages",
                                 Items = new OpenApiSchema
                                 {
-                                    Type = "object",
-                                    Properties = new Dictionary<string, OpenApiSchema>
-                                    {
-                                        ["code"] = new OpenApiSchema { Type = "string" },
-                                        ["message"] = new OpenApiSchema { Type = "string" },
-                                        ["field"] = new OpenApiSchema { Type = "string", Nullable = true }
-                                    }
+                                    Type = "string"
                                 }
+                            },
+                            ["metadata"] = new OpenApiSchema
+                            {
+                                Type = "object",
+                                Description = "Additional metadata about the request/response",
+                                Nullable = true
                             }
                         }
-                    }
+                    },
+                    Example = CreateErrorExample(message, errors)
                 }
+            }
+        };
+
+        return response;
+    }
+
+    private OpenApiObject CreateErrorExample(string message, string[] errors)
+    {
+        var errorsArray = new OpenApiArray();
+        foreach (var error in errors)
+        {
+            errorsArray.Add(new OpenApiString(error));
+        }
+
+        return new OpenApiObject
+        {
+            ["success"] = new OpenApiBoolean(false),
+            ["data"] = new OpenApiNull(),
+            ["message"] = new OpenApiString(message),
+            ["errors"] = errorsArray,
+            ["metadata"] = new OpenApiObject
+            {
+                ["requestId"] = new OpenApiString("req-" + Guid.NewGuid().ToString("N")),
+                ["timestamp"] = new OpenApiString(DateTime.UtcNow.ToString("O")),
+                ["executionTimeMs"] = new OpenApiInteger(12),
+                ["path"] = new OpenApiString("/api/example"),
+                ["method"] = new OpenApiString("GET")
             }
         };
     }
