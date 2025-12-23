@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <Version>10.0.0</Version>
+        <Authors>Furkan Sarikaya</Authors>
+        <Company>FS</Company>
+        <Product>FS.AspNetCore.ResponseWrapper.Transformation</Product>
+        <Description>Response data transformation and filtering for FS.AspNetCore.ResponseWrapper. Provides field selection, data masking for PII/sensitive data, and custom transformations.</Description>
+        <PackageTags>aspnetcore;response-wrapper;transformation;data-masking;pii;gdpr;field-filtering;projection</PackageTags>
+        <PackageProjectUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</RepositoryUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReleaseNotes>
+            v10.0.0
+            - Initial release of Transformation integration
+            - Field selection and projection
+            - Data masking for PII and sensitive data
+            - Custom transformation support
+            - Attribute-based configuration
+            - GDPR and privacy compliance helpers
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper\FS.AspNetCore.ResponseWrapper.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="System.Text.Json" Version="10.0.1" />
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <Version>10.0.0</Version>
+        <Authors>Furkan Sarikaya</Authors>
+        <Company>FS</Company>
+        <Product>FS.AspNetCore.ResponseWrapper.Caching</Product>
+        <Description>Response caching and performance optimization for FS.AspNetCore.ResponseWrapper. Provides distributed caching, ETag support, cache invalidation strategies, and performance enhancements.</Description>
+        <PackageTags>aspnetcore;response-wrapper;caching;redis;distributed-cache;etag;performance;cache-invalidation</PackageTags>
+        <PackageProjectUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</PackageProjectUrl>
+        <PackageRepositoryUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</PackageRepositoryUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReleaseNotes>
+            v10.0.0
+            - Initial release of Caching integration
+            - Distributed cache support (Redis, Memory, SQL Server)
+            - Automatic response caching with TTL
+            - ETag generation and validation
+            - Cache invalidation strategies
+            - Cache hit/miss metadata
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper\FS.AspNetCore.ResponseWrapper.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Caching.SqlServer" Version="10.0.1" />
+    </ItemGroup>
+
+</Project>

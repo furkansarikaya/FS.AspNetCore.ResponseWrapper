@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <Version>10.0.0</Version>
+        <Authors>Furkan Sarikaya</Authors>
+        <Company>FS</Company>
+        <Product>FS.AspNetCore.ResponseWrapper.Extensions</Product>
+        <Description>All-in-one meta package for FS.AspNetCore.ResponseWrapper with all enterprise extensions. Includes OpenAPI (Swashbuckle, NSwag, Scalar), OpenTelemetry, Caching, and Transformation features with preset configurations.</Description>
+        <PackageTags>aspnetcore;response-wrapper;enterprise;openapi;opentelemetry;caching;transformation;all-in-one;meta-package</PackageTags>
+        <PackageProjectUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</RepositoryUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReleaseNotes>
+            v10.0.0
+            - Initial release of Extensions meta package
+            - Includes all extension packages in one convenient package
+            - Preset configurations for common scenarios
+            - Enterprise stack preset
+            - GDPR compliance preset
+            - Performance-optimized preset
+            - Unified configuration API
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper\FS.AspNetCore.ResponseWrapper.csproj" />
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper.OpenApi.Swashbuckle\FS.AspNetCore.ResponseWrapper.OpenApi.Swashbuckle.csproj" />
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper.OpenApi.NSwag\FS.AspNetCore.ResponseWrapper.OpenApi.NSwag.csproj" />
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper.OpenApi.Scalar\FS.AspNetCore.ResponseWrapper.OpenApi.Scalar.csproj" />
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper.OpenTelemetry\FS.AspNetCore.ResponseWrapper.OpenTelemetry.csproj" />
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper.Caching\FS.AspNetCore.ResponseWrapper.Caching.csproj" />
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper.Transformation\FS.AspNetCore.ResponseWrapper.Transformation.csproj" />
+    </ItemGroup>
+
+</Project>

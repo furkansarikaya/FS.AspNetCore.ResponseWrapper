@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <IsPackable>true</IsPackable>
+
+        <!-- Package Information -->
+        <PackageId>FS.AspNetCore.ResponseWrapper.OpenApi.Scalar</PackageId>
+        <Version>10.0.0</Version>
+        <Authors>Furkan SARIKAYA</Authors>
+        <Company>Furkan SARIKAYA</Company>
+        <Product>FS.AspNetCore.ResponseWrapper.OpenApi.Scalar</Product>
+        <Description>Scalar API documentation extension for FS.AspNetCore.ResponseWrapper. Provides optimized configuration for Scalar API documentation with wrapped responses. Includes theme and display settings optimized for ResponseWrapper schemas.</Description>
+        <Copyright>Copyright © 2025 Furkan SARIKAYA</Copyright>
+
+        <!-- Package Metadata -->
+        <PackageTags>aspnetcore;api;response;wrapper;openapi;scalar;documentation</PackageTags>
+        <PackageReleaseNotes>Version 10.0.0: Initial release of Scalar extension package for ResponseWrapper.</PackageReleaseNotes>
+        <PackageProjectUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+
+        <!-- Documentation -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+        <NoWarn>$(NoWarn);1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper\FS.AspNetCore.ResponseWrapper.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- ONLY Scalar dependency -->
+        <PackageReference Include="Scalar.AspNetCore" Version="1.2.42" />
+    </ItemGroup>
+
+</Project>

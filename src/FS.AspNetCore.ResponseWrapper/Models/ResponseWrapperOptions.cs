@@ -250,13 +250,168 @@ public class ResponseWrapperOptions
     /// </remarks>
     /// <example>
     /// <code>
-    /// options.ExcludedTypes = new[] 
-    /// { 
-    ///     typeof(FileResult), 
+    /// options.ExcludedTypes = new[]
+    /// {
+    ///     typeof(FileResult),
     ///     typeof(RedirectResult),
     ///     typeof(CustomStreamResult)
     /// };
     /// </code>
     /// </example>
     public Type[] ExcludedTypes { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the collection of response enrichers that will be executed after response wrapping.
+    /// Extension packages (OpenTelemetry, Caching, etc.) register enrichers here to add metadata,
+    /// headers, or perform additional processing on wrapped responses.
+    /// </summary>
+    /// <value>
+    /// A list of <see cref="Extensibility.IResponseEnricher"/> implementations. Default is an empty list.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Response enrichers provide a powerful extensibility point that allows modification of
+    /// wrapped responses before they are sent to the client. Enrichers execute in order based
+    /// on their <see cref="Extensibility.IResponseEnricher.Order"/> property, with lower values
+    /// executing first.
+    /// </para>
+    ///
+    /// <para><strong>Enricher Execution Order:</strong></para>
+    /// <list type="bullet">
+    /// <item><description>0-49: Core ResponseWrapper enrichers (reserved)</description></item>
+    /// <item><description>50-99: Caching enrichers (ETag, Cache-Control headers)</description></item>
+    /// <item><description>100-199: OpenTelemetry enrichers (tracing, metrics)</description></item>
+    /// <item><description>200+: Custom application enrichers</description></item>
+    /// </list>
+    ///
+    /// <para>
+    /// Enrichers are typically registered by extension packages during their registration phase,
+    /// but can also be manually registered for custom scenarios.
+    /// </para>
+    ///
+    /// <para><strong>Performance Impact:</strong></para>
+    /// <para>
+    /// Each enricher adds processing time to the response pipeline. Keep enricher logic fast
+    /// and lightweight to maintain optimal API performance.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// services.AddResponseWrapper(options =>
+    /// {
+    ///     // Custom enricher for adding version headers
+    ///     options.ResponseEnrichers.Add(new ApiVersionEnricher());
+    ///
+    ///     // Extension package enrichers are typically added automatically
+    ///     // when the extension is registered (e.g., AddCaching(), AddOpenTelemetry())
+    /// });
+    /// </code>
+    /// </example>
+    public List<Extensibility.IResponseEnricher> ResponseEnrichers { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the collection of metadata providers that inject custom metadata into responses.
+    /// Providers are invoked during metadata construction to add application-specific or
+    /// extension-specific metadata alongside standard ResponseWrapper metadata.
+    /// </summary>
+    /// <value>
+    /// A list of <see cref="Extensibility.IMetadataProvider"/> implementations. Default is an empty list.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Metadata providers enable modular extensibility of response metadata without modifying
+    /// core ResponseWrapper logic. Each provider contributes a dictionary of key-value pairs
+    /// that are merged into the response metadata structure.
+    /// </para>
+    ///
+    /// <para><strong>Metadata Namespacing:</strong></para>
+    /// <para>
+    /// To prevent key collisions, all metadata from providers is automatically prefixed with
+    /// the provider's name. For example, if a provider named "cache" returns {"hit": true},
+    /// it will appear in the response as "cache_hit": true.
+    /// </para>
+    ///
+    /// <para><strong>Common Provider Types:</strong></para>
+    /// <list type="bullet">
+    /// <item><description>Cache providers: Cache hit/miss status, TTL, cache keys</description></item>
+    /// <item><description>Telemetry providers: Trace IDs, span IDs, sampling decisions</description></item>
+    /// <item><description>Feature flag providers: Enabled features for the request</description></item>
+    /// <item><description>Rate limit providers: Quota remaining, reset time</description></item>
+    /// <item><description>Geographic providers: Data center, region, availability zone</description></item>
+    /// </list>
+    ///
+    /// <para>
+    /// Providers are typically registered by extension packages, but can also be manually
+    /// registered for custom scenarios.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// services.AddSingleton&lt;IMetadataProvider, CustomMetadataProvider&gt;();
+    /// services.AddResponseWrapper(options =>
+    /// {
+    ///     var provider = serviceProvider.GetRequiredService&lt;CustomMetadataProvider&gt;();
+    ///     options.MetadataProviders.Add(provider);
+    /// });
+    /// </code>
+    /// </example>
+    public List<Extensibility.IMetadataProvider> MetadataProviders { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the collection of response transformers that modify data before wrapping.
+    /// Transformers enable data manipulation such as field filtering, case conversion, or
+    /// data masking based on request parameters or business logic.
+    /// </summary>
+    /// <value>
+    /// A list of <see cref="Extensibility.IResponseTransformer"/> implementations. Default is an empty list.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Response transformers provide a pre-wrapping hook that allows modification of the actual
+    /// data that will be included in the ApiResponse.Data property. Transformers execute in
+    /// registration order, with each transformer receiving the output of the previous one.
+    /// </para>
+    ///
+    /// <para><strong>Transformer Pipeline:</strong></para>
+    /// <para>
+    /// Multiple transformers can be registered and will execute sequentially, creating a
+    /// transformation pipeline. Each transformer can choose whether to process a given response
+    /// type using the <see cref="Extensibility.IResponseTransformer.CanTransform"/> method.
+    /// </para>
+    ///
+    /// <para><strong>Common Transformation Types:</strong></para>
+    /// <list type="bullet">
+    /// <item><description>Field filtering: Return only requested fields (sparse fieldsets)</description></item>
+    /// <item><description>Case conversion: Transform property names (camelCase, snake_case)</description></item>
+    /// <item><description>Data masking: Redact sensitive fields based on permissions</description></item>
+    /// <item><description>Null handling: Remove or convert null properties</description></item>
+    /// <item><description>Localization: Transform enum values or messages to user's language</description></item>
+    /// </list>
+    ///
+    /// <para><strong>Security Considerations:</strong></para>
+    /// <para>
+    /// Be cautious when using user input to drive transformation logic. Validate and sanitize
+    /// all inputs to prevent injection attacks or unintended data exposure.
+    /// </para>
+    ///
+    /// <para><strong>Performance Impact:</strong></para>
+    /// <para>
+    /// Transformers execute in the critical response path and can impact performance, especially
+    /// for large payloads. Consider caching transformation schemas and using efficient
+    /// serialization approaches.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// services.AddResponseWrapper(options =>
+    /// {
+    ///     // Add field filtering transformer
+    ///     options.ResponseTransformers.Add(new FieldFilterTransformer());
+    ///
+    ///     // Add case conversion transformer
+    ///     options.ResponseTransformers.Add(new CaseConversionTransformer());
+    /// });
+    /// </code>
+    /// </example>
+    public List<Extensibility.IResponseTransformer> ResponseTransformers { get; set; } = new();
 }

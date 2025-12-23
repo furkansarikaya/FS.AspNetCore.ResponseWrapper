@@ -203,6 +203,12 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
         var metadata = await BuildResponseMetadata(context, trackingData, originalData);
         var wrappedResponse = CreateWrappedResponse(originalData, metadata);
 
+        // Execute enricher pipeline (added in v10.0.2 for extensibility)
+        if (_options.ResponseEnrichers.Count > 0)
+        {
+            await ExecuteEnricherPipeline(wrappedResponse, context.HttpContext);
+        }
+
         // Replace the original result with wrapped version, preserving result-specific behavior
         context.Result = context.Result switch
         {
@@ -236,7 +242,7 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
     /// <param name="trackingData">Request tracking data</param>
     /// <param name="originalData">The original response data for analysis</param>
     /// <returns>A task containing the complete response metadata with merged custom metadata</returns>
-    private Task<ResponseMetadata> BuildResponseMetadata(
+    private async Task<ResponseMetadata> BuildResponseMetadata(
         ActionExecutedContext context,
         RequestTrackingData trackingData,
         object originalData)
@@ -283,7 +289,274 @@ public class ApiResponseWrapperFilter : IAsyncActionFilter
         // Merge system and custom metadata (ONLY ONCE!)
         metadata.Additional = MergeMetadataDictionaries(systemAdditionalMetadata, customMetadata);
 
-        return Task.FromResult(metadata);
+        // Merge custom metadata from providers (added in v10.0.2 for extensibility)
+        if (_options.MetadataProviders.Count > 0)
+        {
+            await MergeProviderMetadata(metadata, httpContext);
+        }
+
+        return metadata;
+    }
+
+    /// <summary>
+    /// Executes the enricher pipeline in order, allowing extension packages to enhance responses.
+    /// This method was added in v10.0.2 to provide extensibility for features like caching,
+    /// OpenTelemetry, and custom response enrichment.
+    /// </summary>
+    /// <param name="wrappedResponse">The wrapped API response object (ApiResponse&lt;T&gt;)</param>
+    /// <param name="httpContext">The HTTP context for the current request</param>
+    /// <returns>A task representing the asynchronous enrichment operation</returns>
+    /// <remarks>
+    /// <para>
+    /// The enricher pipeline executes registered enrichers in order based on their Order property.
+    /// Each enricher can add metadata, inject headers, or perform other response enhancements.
+    /// </para>
+    ///
+    /// <para><strong>Execution Order:</strong></para>
+    /// <para>
+    /// Enrichers are sorted by their Order property before execution:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>0-49: Core enrichers (reserved for ResponseWrapper internals)</description></item>
+    /// <item><description>50-99: Caching enrichers (ETag, Cache-Control headers)</description></item>
+    /// <item><description>100-199: OpenTelemetry enrichers (tracing, metrics)</description></item>
+    /// <item><description>200+: Custom application enrichers</description></item>
+    /// </list>
+    ///
+    /// <para><strong>Generic Method Invocation:</strong></para>
+    /// <para>
+    /// Since the wrapped response is dynamically typed (ApiResponse&lt;T&gt; where T is determined
+    /// at runtime), this method uses reflection to invoke the generic EnrichAsync&lt;T&gt; method
+    /// with the correct type argument. This ensures type safety while maintaining flexibility.
+    /// </para>
+    ///
+    /// <para><strong>Error Handling:</strong></para>
+    /// <para>
+    /// Enricher failures are logged but do not stop the pipeline. Each enricher is executed
+    /// independently, and exceptions are caught to prevent one failing enricher from affecting
+    /// others or breaking the entire response.
+    /// </para>
+    ///
+    /// <para><strong>Performance Considerations:</strong></para>
+    /// <para>
+    /// The pipeline only executes when enrichers are registered. When the ResponseEnrichers
+    /// collection is empty, this method is not called, ensuring zero overhead for applications
+    /// that don't use enrichers.
+    /// </para>
+    /// </remarks>
+    private async Task ExecuteEnricherPipeline(object wrappedResponse, HttpContext httpContext)
+    {
+        if (wrappedResponse == null)
+        {
+            _logger.LogWarning("Cannot execute enricher pipeline: wrapped response is null");
+            return;
+        }
+
+        // Get the type of the wrapped response (ApiResponse<T>)
+        var responseType = wrappedResponse.GetType();
+
+        // Verify it's actually an ApiResponse<T>
+        if (!responseType.IsGenericType || responseType.GetGenericTypeDefinition() != typeof(ApiResponse<>))
+        {
+            _logger.LogWarning("Cannot execute enricher pipeline: response type {ResponseType} is not ApiResponse<T>",
+                responseType.Name);
+            return;
+        }
+
+        // Get the generic type argument (T)
+        var dataType = responseType.GetGenericArguments()[0];
+
+        _logger.LogDebug("Executing enricher pipeline for ApiResponse<{DataType}> with {EnricherCount} enrichers",
+            dataType.Name, _options.ResponseEnrichers.Count);
+
+        // Sort enrichers by order
+        var sortedEnrichers = _options.ResponseEnrichers.OrderBy(e => e.Order).ToArray();
+
+        var executedCount = 0;
+        var failedCount = 0;
+
+        foreach (var enricher in sortedEnrichers)
+        {
+            try
+            {
+                var enricherType = enricher.GetType();
+                _logger.LogTrace("Executing enricher {EnricherType} (Order: {Order})",
+                    enricherType.Name, enricher.Order);
+
+                // Get the EnrichAsync<T> method
+                var enrichAsyncMethod = enricher.GetType()
+                    .GetMethod("EnrichAsync", BindingFlags.Public | BindingFlags.Instance);
+
+                if (enrichAsyncMethod == null)
+                {
+                    _logger.LogWarning("Enricher {EnricherType} does not have EnrichAsync method",
+                        enricherType.Name);
+                    failedCount++;
+                    continue;
+                }
+
+                // Make it generic with the data type
+                var genericEnrichAsync = enrichAsyncMethod.MakeGenericMethod(dataType);
+
+                // Invoke the method
+                var enrichTask = genericEnrichAsync.Invoke(enricher, [wrappedResponse, httpContext]);
+
+                if (enrichTask is Task task)
+                {
+                    await task;
+                    executedCount++;
+                    _logger.LogTrace("Successfully executed enricher {EnricherType}", enricherType.Name);
+                }
+                else
+                {
+                    _logger.LogWarning("EnrichAsync method on {EnricherType} did not return a Task",
+                        enricherType.Name);
+                    failedCount++;
+                }
+            }
+            catch (Exception ex)
+            {
+                failedCount++;
+                var enricherType = enricher.GetType();
+                _logger.LogError(ex,
+                    "Enricher {EnricherType} (Order: {Order}) failed during execution. " +
+                    "Error: {ErrorMessage}. Continuing with remaining enrichers",
+                    enricherType.Name, enricher.Order, ex.Message);
+
+                // Continue with next enricher - don't let one failure stop the pipeline
+            }
+        }
+
+        _logger.LogDebug(
+            "Enricher pipeline execution completed for ApiResponse<{DataType}>: " +
+            "{ExecutedCount} executed successfully, {FailedCount} failed",
+            dataType.Name, executedCount, failedCount);
+    }
+
+    /// <summary>
+    /// Merges metadata from registered metadata providers into the response metadata.
+    /// This method was added in v10.0.2 to enable extension packages to contribute custom metadata.
+    /// </summary>
+    /// <param name="metadata">The response metadata to enhance with provider data</param>
+    /// <param name="httpContext">The HTTP context for the current request</param>
+    /// <returns>A task representing the asynchronous metadata merging operation</returns>
+    /// <remarks>
+    /// <para>
+    /// Metadata providers allow extension packages (caching, telemetry, etc.) to inject
+    /// custom metadata into responses without modifying the core ResponseWrapper logic.
+    /// Each provider contributes a dictionary of key-value pairs that are merged into
+    /// the response metadata.
+    /// </para>
+    ///
+    /// <para><strong>Namespace Prefixing:</strong></para>
+    /// <para>
+    /// To prevent key collisions between different providers, all metadata keys are
+    /// automatically prefixed with the provider's name. For example, if a provider named
+    /// "cache" returns {"hit": true, "ttl": 300}, the final metadata will contain
+    /// "cache_hit": true and "cache_ttl": 300.
+    /// </para>
+    ///
+    /// <para><strong>Error Handling:</strong></para>
+    /// <para>
+    /// Provider failures are logged but do not stop the metadata collection process.
+    /// Each provider is executed independently, and exceptions are caught to prevent
+    /// one failing provider from affecting others or breaking the entire response.
+    /// </para>
+    ///
+    /// <para><strong>Performance Considerations:</strong></para>
+    /// <para>
+    /// This method only executes when metadata providers are registered. When the
+    /// MetadataProviders collection is empty, this method is not called, ensuring
+    /// zero overhead for applications that don't use metadata providers.
+    /// </para>
+    /// </remarks>
+    private async Task MergeProviderMetadata(ResponseMetadata metadata, HttpContext httpContext)
+    {
+        if (metadata == null)
+        {
+            _logger.LogWarning("Cannot merge provider metadata: metadata object is null");
+            return;
+        }
+
+        _logger.LogDebug("Merging metadata from {ProviderCount} metadata providers", _options.MetadataProviders.Count);
+
+        var totalKeysAdded = 0;
+        var failedProviders = 0;
+
+        foreach (var provider in _options.MetadataProviders)
+        {
+            try
+            {
+                var providerType = provider.GetType();
+                var providerName = provider.Name;
+
+                if (string.IsNullOrWhiteSpace(providerName))
+                {
+                    _logger.LogWarning("Metadata provider {ProviderType} has null or empty Name property, skipping",
+                        providerType.Name);
+                    failedProviders++;
+                    continue;
+                }
+
+                _logger.LogTrace("Executing metadata provider '{ProviderName}' ({ProviderType})",
+                    providerName, providerType.Name);
+
+                // Get metadata from provider
+                var providerMetadata = await provider.GetMetadataAsync(httpContext);
+
+                if (providerMetadata == null || providerMetadata.Count == 0)
+                {
+                    _logger.LogTrace("Metadata provider '{ProviderName}' returned no metadata", providerName);
+                    continue;
+                }
+
+                // Ensure Additional dictionary is initialized
+                metadata.Additional ??= new Dictionary<string, object>();
+
+                // Add provider metadata with name prefix
+                var keysAdded = 0;
+                foreach (var kvp in providerMetadata)
+                {
+                    var prefixedKey = $"{providerName}_{kvp.Key}";
+
+                    // Check for duplicate keys (shouldn't happen with proper prefixing, but be defensive)
+                    if (metadata.Additional.ContainsKey(prefixedKey))
+                    {
+                        _logger.LogWarning(
+                            "Metadata provider '{ProviderName}' attempted to add duplicate key '{Key}'. " +
+                            "The existing value will be overwritten",
+                            providerName, prefixedKey);
+                    }
+
+                    metadata.Additional[prefixedKey] = kvp.Value;
+                    keysAdded++;
+                    totalKeysAdded++;
+
+                    _logger.LogTrace("Added metadata key '{Key}' from provider '{ProviderName}'",
+                        prefixedKey, providerName);
+                }
+
+                _logger.LogDebug("Metadata provider '{ProviderName}' added {KeyCount} metadata entries",
+                    providerName, keysAdded);
+            }
+            catch (Exception ex)
+            {
+                failedProviders++;
+                var providerType = provider.GetType();
+                var providerName = provider.Name ?? "Unknown";
+
+                _logger.LogError(ex,
+                    "Metadata provider '{ProviderName}' ({ProviderType}) failed during execution. " +
+                    "Error: {ErrorMessage}. Continuing with remaining providers",
+                    providerName, providerType.Name, ex.Message);
+
+                // Continue with next provider - don't let one failure stop metadata collection
+            }
+        }
+
+        _logger.LogDebug(
+            "Provider metadata merging completed: {TotalKeys} keys added, {FailedProviders} providers failed",
+            totalKeysAdded, failedProviders);
     }
 
     /// <summary>

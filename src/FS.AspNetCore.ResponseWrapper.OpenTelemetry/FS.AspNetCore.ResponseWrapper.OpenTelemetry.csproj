@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <Version>10.0.0</Version>
+        <Authors>Furkan Sarikaya</Authors>
+        <Company>FS</Company>
+        <Product>FS.AspNetCore.ResponseWrapper.OpenTelemetry</Product>
+        <Description>OpenTelemetry and distributed tracing integration for FS.AspNetCore.ResponseWrapper. Provides automatic trace context propagation, activity enrichment, and custom metrics for observability.</Description>
+        <PackageTags>aspnetcore;response-wrapper;opentelemetry;tracing;observability;distributed-tracing;metrics;telemetry</PackageTags>
+        <PackageProjectUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</RepositoryUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReleaseNotes>
+            v10.0.0
+            - Initial release of OpenTelemetry integration
+            - Automatic distributed tracing support
+            - Activity enrichment with response metadata
+            - Custom metrics for response times and error rates
+            - Integration with popular observability platforms
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\FS.AspNetCore.ResponseWrapper\FS.AspNetCore.ResponseWrapper.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="OpenTelemetry" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Api" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.12.0" />
+    </ItemGroup>
+
+</Project>

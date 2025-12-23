@@ -10,7 +10,7 @@
 
         <!-- Package Information -->
         <PackageId>FS.AspNetCore.ResponseWrapper</PackageId>
-        <Version>10.0.1</Version>
+        <Version>10.0.2</Version>
         <Authors>Furkan SARIKAYA</Authors>
         <Company>Furkan SARIKAYA</Company>
         <Product>FS.AspNetCore.ResponseWrapper</Product>
@@ -18,8 +18,8 @@
         <Copyright>Copyright © 2025 Furkan SARIKAYA</Copyright>
 
         <!-- Package Metadata -->
-        <PackageTags>aspnetcore;api;response;wrapper;metadata;filter;middleware;automation;json;rest;status-codes;pagination;error-handling</PackageTags>
-        <PackageReleaseNotes>Version 9.2.0: Added intelligent application status code extraction and promotion feature. ResponseWrapper now automatically detects and promotes status codes from response data that implements IHasStatusCode interface, enabling complex workflow management and rich client-side conditional logic. Enhanced error handling with automatic error code extraction from all exception types.</PackageReleaseNotes>
+        <PackageTags>aspnetcore;api;response;wrapper;metadata;filter;middleware;automation;json;rest;status-codes;pagination;error-handling;extensibility</PackageTags>
+        <PackageReleaseNotes>Version 10.0.2: Added extensibility framework for enterprise features. Introduced three new interfaces (IResponseEnricher, IMetadataProvider, IResponseTransformer) that enable extension packages to enhance responses, inject custom metadata, and transform data before wrapping. This backward-compatible update provides foundation for upcoming extension packages including OpenAPI/Swagger integration, OpenTelemetry tracing, HTTP caching, and response transformation capabilities. Zero breaking changes - existing applications continue to work without modifications.</PackageReleaseNotes>
         <PackageProjectUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</PackageProjectUrl>
         <RepositoryUrl>https://github.com/furkansarikaya/FS.AspNetCore.ResponseWrapper</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
