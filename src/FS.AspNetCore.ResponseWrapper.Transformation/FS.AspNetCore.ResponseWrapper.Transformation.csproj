@@ -5,7 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <Version>10.0.0</Version>
+        <Version>10.0.5</Version>
         <Authors>Furkan Sarikaya</Authors>
         <Company>FS</Company>
         <Product>FS.AspNetCore.ResponseWrapper.Transformation</Product>
@@ -30,7 +30,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="System.Text.Json" Version="10.0.1" />
+        <PackageReference Include="System.Text.Json" Version="10.0.5" />
     </ItemGroup>
 
 </Project>

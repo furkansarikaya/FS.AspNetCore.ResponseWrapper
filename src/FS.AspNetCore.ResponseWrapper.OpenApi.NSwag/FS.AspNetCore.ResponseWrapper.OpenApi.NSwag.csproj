@@ -10,7 +10,7 @@
 
         <!-- Package Information -->
         <PackageId>FS.AspNetCore.ResponseWrapper.OpenApi.NSwag</PackageId>
-        <Version>10.0.0</Version>
+        <Version>10.0.5</Version>
         <Authors>Furkan SARIKAYA</Authors>
         <Company>Furkan SARIKAYA</Company>
         <Product>FS.AspNetCore.ResponseWrapper.OpenApi.NSwag</Product>
@@ -38,7 +38,7 @@
 
     <ItemGroup>
         <!-- ONLY NSwag dependency -->
-        <PackageReference Include="NSwag.AspNetCore" Version="14.0.3" />
+        <PackageReference Include="NSwag.AspNetCore" Version="14.6.3" />
     </ItemGroup>
 
 </Project>
